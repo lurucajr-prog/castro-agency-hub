@@ -7,6 +7,8 @@ import Tasks from './components/Tasks'
 import Referrals from './components/Referrals'
 import Reviews from './components/Reviews'
 import Sales from './components/Sales'
+import Cancellations from './components/Cancellations'
+import Renewals from './components/Renewals'
 import Chat from './components/Chat'
 import { N, Spinner } from './components/shared'
 
@@ -63,7 +65,16 @@ export default function App() {
 
   if (!session || !profile) return <Login />
 
-  const pages = { dashboard: Dashboard, tasks: Tasks, referrals: Referrals, reviews: Reviews, sales: Sales, chat: Chat }
+  const pages = {
+    dashboard:     Dashboard,
+    tasks:         Tasks,
+    referrals:     Referrals,
+    reviews:       Reviews,
+    sales:         Sales,
+    cancellations: Cancellations,
+    renewals:      Renewals,
+    chat:          Chat,
+  }
   const PageComponent = pages[page] || Dashboard
 
   return (
