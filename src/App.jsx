@@ -9,6 +9,7 @@ import Reviews from './components/Reviews'
 import Sales from './components/Sales'
 import Cancellations from './components/Cancellations'
 import Renewals from './components/Renewals'
+import Practice from './components/Practice'
 import Chat from './components/Chat'
 import { N, Spinner } from './components/shared'
 
@@ -73,6 +74,7 @@ export default function App() {
     sales:         Sales,
     cancellations: Cancellations,
     renewals:      Renewals,
+    practice:      Practice,
     chat:          Chat,
   }
   const PageComponent = pages[page] || Dashboard
