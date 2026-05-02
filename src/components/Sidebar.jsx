@@ -1,14 +1,15 @@
 import { N, R } from './shared'
 
 const NAV = [
-  { id: 'dashboard',     label: 'Dashboard',     icon: '◉' },
-  { id: 'tasks',         label: 'Tasks',          icon: '☑' },
-  { id: 'referrals',     label: 'Referrals',      icon: '↗' },
-  { id: 'reviews',       label: 'Reviews',        icon: '★' },
-  { id: 'sales',         label: 'Sales',          icon: '$' },
-  { id: 'cancellations', label: 'Cancellations',  icon: '⚠' },
-  { id: 'renewals',      label: 'Renewals',       icon: '↻' },
-  { id: 'chat',          label: 'Team chat',      icon: '◎' },
+  { id: 'dashboard',     label: 'Dashboard',    icon: '◉' },
+  { id: 'tasks',         label: 'Tasks',         icon: '☑' },
+  { id: 'referrals',     label: 'Referrals',     icon: '↗' },
+  { id: 'reviews',       label: 'Reviews',       icon: '★' },
+  { id: 'sales',         label: 'Sales',         icon: '$' },
+  { id: 'cancellations', label: 'Cancellations', icon: '⚠' },
+  { id: 'renewals',      label: 'Renewals',      icon: '↻' },
+  { id: 'practice',      label: 'Practice',      icon: '🎯' },
+  { id: 'chat',          label: 'Team chat',     icon: '◎' },
 ]
 
 export default function Sidebar({ user, page, setPage, onLogout }) {
