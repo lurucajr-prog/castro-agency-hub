@@ -9,19 +9,21 @@ export default function Chat({ user }) {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [lightbox, setLightbox] = useState(null)
+  const [hoveredMsg, setHoveredMsg] = useState(null)
   const endRef = useRef(null)
   const fileRef = useRef(null)
 
   useEffect(() => {
     fetchMessages()
-
     const channel = supabase
       .channel('public:messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         setMessages(prev => [...prev, payload.new])
       })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, payload => {
+        setMessages(prev => prev.filter(m => m.id !== payload.old.id))
+      })
       .subscribe()
-
     return () => supabase.removeChannel(channel)
   }, [])
 
@@ -42,26 +44,13 @@ export default function Chat({ user }) {
   async function uploadAndSend(file) {
     if (!file || !file.type.startsWith('image/')) return
     if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB.'); return }
-
     setUploading(true)
     const ext = file.name ? file.name.split('.').pop() : 'png'
     const fileName = `${user.id}-${Date.now()}.${ext}`
-
-    const { error } = await supabase.storage
-      .from('chat-images')
-      .upload(fileName, file, { contentType: file.type })
-
+    const { error } = await supabase.storage.from('chat-images').upload(fileName, file, { contentType: file.type })
     if (error) { alert('Upload failed. Please try again.'); setUploading(false); return }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from('chat-images')
-      .getPublicUrl(fileName)
-
-    await supabase.from('messages').insert({
-      uid: user.id,
-      text: text.trim() || '',
-      image_url: publicUrl,
-    })
+    const { data: { publicUrl } } = supabase.storage.from('chat-images').getPublicUrl(fileName)
+    await supabase.from('messages').insert({ uid: user.id, text: text.trim() || '', image_url: publicUrl })
     setText('')
     setUploading(false)
   }
@@ -71,6 +60,11 @@ export default function Chat({ user }) {
     if (!trimmed) return
     setText('')
     await supabase.from('messages').insert({ uid: user.id, text: trimmed, image_url: null })
+  }
+
+  async function deleteMessage(id) {
+    await supabase.from('messages').delete().eq('id', id)
+    setMessages(prev => prev.filter(m => m.id !== id))
   }
 
   async function handleImageUpload(e) {
@@ -120,23 +114,21 @@ export default function Chat({ user }) {
     grouped.push({ type: 'msg', ...m })
   })
 
+  const isAdmin = user.role === 'admin'
+
   if (loading) return <Spinner />
 
   return (
     <>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-        {/* Header */}
         <div style={{ padding: '13px 18px', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 600, color: '#111' }}>Team chat</div>
           <div style={{ fontSize: 11, color: '#6b7280' }}>{profiles.length} members · Castro Agency</div>
         </div>
 
-        {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {grouped.length === 0 && (
-            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 13, marginTop: 40 }}>
-              No messages yet. Say hello to the team! 👋
-            </div>
+            <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 13, marginTop: 40 }}>No messages yet. Say hello to the team! 👋</div>
           )}
           {grouped.map((item, idx) => {
             if (item.type === 'date') {
@@ -150,18 +142,39 @@ export default function Chat({ user }) {
             }
             const isMe = item.uid === user.id
             const p = getProfile(item.uid)
+            const canDelete = isMe || isAdmin
+            const isHovered = hoveredMsg === item.id
+
             return (
-              <div key={item.id} style={{ display: 'flex', gap: 9, flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}>
+              <div
+                key={item.id}
+                onMouseEnter={() => setHoveredMsg(item.id)}
+                onMouseLeave={() => setHoveredMsg(null)}
+                style={{ display: 'flex', gap: 9, flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start', position: 'relative' }}
+              >
                 <div style={{
                   width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
                   background: p.role === 'admin' ? R : '#dbeafe',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 10, fontWeight: 600, color: p.role === 'admin' ? '#fff' : '#1e40af',
                 }}>{p.ini}</div>
+
                 <div style={{ maxWidth: '68%' }}>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexDirection: isMe ? 'row-reverse' : 'row', marginBottom: 3 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: isMe ? 'row-reverse' : 'row', marginBottom: 3 }}>
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>{isMe ? 'You' : p.name}</span>
                     <span style={{ fontSize: 10, color: '#9ca3af' }}>{formatTime(item.created_at)}</span>
+                    {/* Delete button — shows on hover for own messages or admin */}
+                    {canDelete && isHovered && (
+                      <button
+                        onClick={() => { if (window.confirm('Delete this message?')) deleteMessage(item.id) }}
+                        title="Delete message"
+                        style={{
+                          border: 'none', background: 'none', cursor: 'pointer',
+                          fontSize: 12, color: '#ef4444', padding: '0 2px', lineHeight: 1,
+                          opacity: 0.7,
+                        }}
+                      >🗑</button>
+                    )}
                   </div>
                   {item.image_url && (
                     <div style={{ marginBottom: item.text ? 6 : 0 }}>
@@ -169,20 +182,14 @@ export default function Chat({ user }) {
                         src={item.image_url}
                         alt="shared"
                         onClick={() => setLightbox(item.image_url)}
-                        style={{
-                          maxWidth: 260, maxHeight: 200, borderRadius: 10,
-                          cursor: 'zoom-in', display: 'block',
-                          border: '1px solid #e5e7eb', objectFit: 'cover',
-                        }}
+                        style={{ maxWidth: 260, maxHeight: 200, borderRadius: 10, cursor: 'zoom-in', display: 'block', border: '1px solid #e5e7eb', objectFit: 'cover' }}
                       />
                     </div>
                   )}
                   {item.text && (
                     <div style={{
-                      background: isMe ? N : '#f3f4f6',
-                      color: isMe ? '#fff' : '#111',
-                      padding: '9px 13px',
-                      borderRadius: isMe ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
+                      background: isMe ? N : '#f3f4f6', color: isMe ? '#fff' : '#111',
+                      padding: '9px 13px', borderRadius: isMe ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
                       fontSize: 13, lineHeight: 1.55,
                     }}>{item.text}</div>
                   )}
@@ -193,11 +200,8 @@ export default function Chat({ user }) {
           <div ref={endRef} />
         </div>
 
-        {/* Input */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
-          {uploading && (
-            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, paddingLeft: 4 }}>⏳ Uploading image…</div>
-          )}
+          {uploading && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, paddingLeft: 4 }}>⏳ Uploading image…</div>}
           <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
             <button
               onClick={() => fileRef.current?.click()}
@@ -219,11 +223,7 @@ export default function Chat({ user }) {
               onPaste={handlePaste}
               placeholder={uploading ? 'Uploading…' : 'Message the team… (or paste an image with Ctrl+V / ⌘+V)'}
               disabled={uploading}
-              style={{
-                flex: 1, fontSize: 13, padding: '9px 15px',
-                border: '1px solid #e5e7eb', borderRadius: 22,
-                background: '#f9fafb', color: '#111', outline: 'none',
-              }}
+              style={{ flex: 1, fontSize: 13, padding: '9px 15px', border: '1px solid #e5e7eb', borderRadius: 22, background: '#f9fafb', color: '#111', outline: 'none' }}
             />
             <button
               onClick={sendMessage}
@@ -238,16 +238,8 @@ export default function Chat({ user }) {
         </div>
       </div>
 
-      {/* Lightbox */}
       {lightbox && (
-        <div
-          onClick={() => setLightbox(null)}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 2000, cursor: 'zoom-out', padding: 24,
-          }}
-        >
+        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, cursor: 'zoom-out', padding: 24 }}>
           <img src={lightbox} alt="full size" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 10, objectFit: 'contain' }} />
         </div>
       )}
