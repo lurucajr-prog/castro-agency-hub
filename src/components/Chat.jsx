@@ -39,52 +39,56 @@ export default function Chat({ user }) {
     setLoading(false)
   }
 
-  async function sendMessage(imageUrl = null) {
-    const trimmed = text.trim()
-    if (!trimmed && !imageUrl) return
-    setText('')
-    await supabase.from('messages').insert({
-      uid: user.id,
-      text: trimmed || '',
-      image_url: imageUrl || null,
-    })
-  }
-
-  async function handleImageUpload(e) {
-    const file = e.target.files[0]
-    if (!file) return
-
-    // Validate type and size (max 5MB)
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file.')
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be under 5MB.')
-      return
-    }
+  async function uploadAndSend(file) {
+    if (!file || !file.type.startsWith('image/')) return
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB.'); return }
 
     setUploading(true)
-    const ext = file.name.split('.').pop()
+    const ext = file.name ? file.name.split('.').pop() : 'png'
     const fileName = `${user.id}-${Date.now()}.${ext}`
 
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('chat-images')
       .upload(fileName, file, { contentType: file.type })
 
-    if (error) {
-      alert('Upload failed. Please try again.')
-      setUploading(false)
-      return
-    }
+    if (error) { alert('Upload failed. Please try again.'); setUploading(false); return }
 
     const { data: { publicUrl } } = supabase.storage
       .from('chat-images')
       .getPublicUrl(fileName)
 
-    await sendMessage(publicUrl)
+    await supabase.from('messages').insert({
+      uid: user.id,
+      text: text.trim() || '',
+      image_url: publicUrl,
+    })
+    setText('')
     setUploading(false)
+  }
+
+  async function sendMessage() {
+    const trimmed = text.trim()
+    if (!trimmed) return
+    setText('')
+    await supabase.from('messages').insert({ uid: user.id, text: trimmed, image_url: null })
+  }
+
+  async function handleImageUpload(e) {
+    const file = e.target.files[0]
+    if (file) await uploadAndSend(file)
     e.target.value = ''
+  }
+
+  async function handlePaste(e) {
+    const items = Array.from(e.clipboardData?.items || [])
+    const imageItem = items.find(item => item.type.startsWith('image/'))
+    if (!imageItem) return
+    e.preventDefault()
+    const file = imageItem.getAsFile()
+    if (file) {
+      const namedFile = new File([file], `paste-${Date.now()}.png`, { type: file.type })
+      await uploadAndSend(namedFile)
+    }
   }
 
   function onKey(e) {
@@ -108,7 +112,6 @@ export default function Chat({ user }) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
-  // Group messages by date
   const grouped = []
   let lastDate = null
   messages.forEach(m => {
@@ -160,8 +163,6 @@ export default function Chat({ user }) {
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>{isMe ? 'You' : p.name}</span>
                     <span style={{ fontSize: 10, color: '#9ca3af' }}>{formatTime(item.created_at)}</span>
                   </div>
-
-                  {/* Image message */}
                   {item.image_url && (
                     <div style={{ marginBottom: item.text ? 6 : 0 }}>
                       <img
@@ -176,8 +177,6 @@ export default function Chat({ user }) {
                       />
                     </div>
                   )}
-
-                  {/* Text message */}
                   {item.text && (
                     <div style={{
                       background: isMe ? N : '#f3f4f6',
@@ -196,33 +195,30 @@ export default function Chat({ user }) {
 
         {/* Input */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
+          {uploading && (
+            <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, paddingLeft: 4 }}>⏳ Uploading image…</div>
+          )}
           <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
-            {/* Image upload button */}
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
               title="Send an image"
               style={{
                 width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                border: '1px solid #e5e7eb', background: uploading ? '#f3f4f6' : '#fff',
+                border: '1px solid #e5e7eb', background: '#fff',
                 cursor: uploading ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 17, color: uploading ? '#d1d5db' : '#6b7280',
               }}
-            >{uploading ? '⏳' : '📎'}</button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleImageUpload}
-            />
-
+            >📎</button>
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
             <input
               value={text}
               onChange={e => setText(e.target.value)}
               onKeyDown={onKey}
-              placeholder="Message the team…"
+              onPaste={handlePaste}
+              placeholder={uploading ? 'Uploading…' : 'Message the team… (or paste an image with Ctrl+V / ⌘+V)'}
+              disabled={uploading}
               style={{
                 flex: 1, fontSize: 13, padding: '9px 15px',
                 border: '1px solid #e5e7eb', borderRadius: 22,
@@ -230,18 +226,19 @@ export default function Chat({ user }) {
               }}
             />
             <button
-              onClick={() => sendMessage()}
+              onClick={sendMessage}
+              disabled={uploading}
               style={{
-                background: N, color: '#fff', border: 'none',
+                background: uploading ? '#9ca3af' : N, color: '#fff', border: 'none',
                 borderRadius: 22, padding: '9px 20px', fontSize: 13,
-                fontWeight: 500, cursor: 'pointer', flexShrink: 0,
+                fontWeight: 500, cursor: uploading ? 'not-allowed' : 'pointer', flexShrink: 0,
               }}
             >Send</button>
           </div>
         </div>
       </div>
 
-      {/* Lightbox — click image to view full size */}
+      {/* Lightbox */}
       {lightbox && (
         <div
           onClick={() => setLightbox(null)}
@@ -251,11 +248,7 @@ export default function Chat({ user }) {
             zIndex: 2000, cursor: 'zoom-out', padding: 24,
           }}
         >
-          <img
-            src={lightbox}
-            alt="full size"
-            style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 10, objectFit: 'contain' }}
-          />
+          <img src={lightbox} alt="full size" style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 10, objectFit: 'contain' }} />
         </div>
       )}
     </>
