@@ -8,7 +8,7 @@ const NAV = [
   { id: 'sales',         label: 'Sales',         icon: '$' },
   { id: 'cancellations', label: 'Cancellations', icon: '⚠' },
   { id: 'renewals',      label: 'Renewals',      icon: '↻' },
-  { id: 'practice',      label: 'Practice',      icon: '🎯' },
+  { id: 'learning',      label: 'Learning',      icon: '📚' },
   { id: 'chat',          label: 'Team chat',     icon: '◎' },
 ]
 
@@ -57,14 +57,7 @@ export default function Sidebar({ user, page, setPage, onLogout }) {
             <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10 }}>{user.title}</div>
           </div>
         </div>
-        <button
-          onClick={onLogout}
-          style={{
-            width: '100%', background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6,
-            color: 'rgba(255,255,255,0.45)', fontSize: 11, padding: '4px 0', cursor: 'pointer',
-          }}
-        >Sign out</button>
+        <button onClick={onLogout} style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, color: 'rgba(255,255,255,0.45)', fontSize: 11, padding: '4px 0', cursor: 'pointer' }}>Sign out</button>
       </div>
     </div>
   )
