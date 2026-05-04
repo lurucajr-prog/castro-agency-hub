@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import { N, R } from './shared'
 
 const NAV = [
@@ -10,9 +12,39 @@ const NAV = [
   { id: 'renewals',      label: 'Renewals',      icon: '↻' },
   { id: 'learning',      label: 'Learning',      icon: '📚' },
   { id: 'chat',          label: 'Team chat',     icon: '◎' },
+  { id: 'dms',           label: 'Messages',      icon: '💬' },
 ]
 
 export default function Sidebar({ user, page, setPage, onLogout }) {
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    fetchUnread()
+    const channel = supabase
+      .channel('sidebar_unread')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages' }, payload => {
+        if (payload.new.to_uid === user.id) {
+          setUnreadCount(c => c + 1)
+        }
+      })
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [])
+
+  // Reset badge when viewing DMs
+  useEffect(() => {
+    if (page === 'dms') setUnreadCount(0)
+  }, [page])
+
+  async function fetchUnread() {
+    const { count } = await supabase
+      .from('direct_messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('to_uid', user.id)
+      .eq('read', false)
+    setUnreadCount(count || 0)
+  }
+
   return (
     <div style={{ width: 165, background: N, display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100vh' }}>
       <div style={{ padding: '15px 13px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
@@ -23,6 +55,7 @@ export default function Sidebar({ user, page, setPage, onLogout }) {
       <nav style={{ flex: 1, padding: '8px 6px', overflowY: 'auto' }}>
         {NAV.map(n => {
           const active = page === n.id
+          const showBadge = n.id === 'dms' && unreadCount > 0 && page !== 'dms'
           return (
             <div
               key={n.id}
@@ -33,12 +66,18 @@ export default function Sidebar({ user, page, setPage, onLogout }) {
                 background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
                 color: active ? '#fff' : 'rgba(255,255,255,0.5)',
                 fontSize: 12, fontWeight: active ? 500 : 400,
+                justifyContent: 'space-between',
               }}
               onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
               onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
             >
-              <span style={{ fontSize: 13 }}>{n.icon}</span>
-              {n.label}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13 }}>{n.icon}</span>
+                {n.label}
+              </div>
+              {showBadge && (
+                <span style={{ background: R, color: '#fff', borderRadius: 99, fontSize: 9, fontWeight: 700, padding: '1px 6px', flexShrink: 0 }}>{unreadCount}</span>
+              )}
             </div>
           )
         })}
