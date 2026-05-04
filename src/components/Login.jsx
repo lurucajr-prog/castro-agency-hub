@@ -4,8 +4,7 @@ import { R } from './shared'
 
 // Castro Agency office photo — upload this to Supabase storage bucket "public-assets"
 // and replace the URL below with the public URL
-const OFFICE_PHOTO = 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80'
-
+const OFFICE_PHOTO = 'https://zijprpxophvgehvfhxfb.supabase.co/storage/v1/object/public/public-assets/Castro%20Agency.webp'
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
