@@ -11,6 +11,7 @@ import Cancellations from './components/Cancellations'
 import Renewals from './components/Renewals'
 import Learning from './components/Learning'
 import Chat from './components/Chat'
+import DirectMessages from './components/DirectMessages'
 import { N, Spinner } from './components/shared'
 
 export default function App() {
@@ -67,13 +68,17 @@ export default function App() {
     renewals:      Renewals,
     learning:      Learning,
     chat:          Chat,
+    dms:           DirectMessages,
   }
   const PageComponent = pages[page] || Dashboard
+
+  // Chat and DMs use full height without scroll wrapper
+  const fullHeight = ['chat', 'dms'].includes(page)
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <Sidebar user={profile} page={page} setPage={setPage} onLogout={handleLogout} />
-      <div style={{ flex: 1, overflow: 'auto', background: '#f9fafb' }}>
+      <div style={{ flex: 1, overflow: fullHeight ? 'hidden' : 'auto', background: '#f9fafb' }}>
         <PageComponent user={profile} setPage={setPage} />
       </div>
     </div>
