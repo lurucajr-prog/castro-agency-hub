@@ -9,7 +9,7 @@ import Reviews from './components/Reviews'
 import Sales from './components/Sales'
 import Cancellations from './components/Cancellations'
 import Renewals from './components/Renewals'
-import Practice from './components/Practice'
+import Learning from './components/Learning'
 import Chat from './components/Chat'
 import { N, Spinner } from './components/shared'
 
@@ -25,23 +25,17 @@ export default function App() {
       if (session) fetchProfile(session.user.email)
       else setLoading(false)
     })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       if (session) fetchProfile(session.user.email)
       else { setProfile(null); setLoading(false) }
     })
-
     return () => subscription.unsubscribe()
   }, [])
 
   async function fetchProfile(email) {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('email', email)
-      .single()
+    const { data, error } = await supabase.from('profiles').select('*').eq('email', email).single()
     if (error) console.error('Profile fetch error:', error)
     setProfile(data)
     setLoading(false)
@@ -54,10 +48,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh', background: N,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16,
-      }}>
+      <div style={{ minHeight: '100vh', background: N, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
         <div style={{ color: '#fff', fontSize: 18, fontWeight: 500 }}>Castro Agency Hub</div>
         <Spinner />
       </div>
@@ -74,7 +65,7 @@ export default function App() {
     sales:         Sales,
     cancellations: Cancellations,
     renewals:      Renewals,
-    practice:      Practice,
+    learning:      Learning,
     chat:          Chat,
   }
   const PageComponent = pages[page] || Dashboard
