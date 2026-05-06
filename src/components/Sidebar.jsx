@@ -8,6 +8,7 @@ const NAV = [
   { id: 'referrals',     label: 'Referrals',     icon: '↗' },
   { id: 'reviews',       label: 'Reviews',       icon: '★' },
   { id: 'sales',         label: 'Sales',         icon: '$' },
+  { id: 'lead-returns',  label: 'Lead Returns',  icon: '🎯' },
   { id: 'cancellations', label: 'Cancellations', icon: '⚠' },
   { id: 'renewals',      label: 'Renewals',      icon: '↻' },
   { id: 'learning',      label: 'Learning',      icon: '📚' },
@@ -16,25 +17,20 @@ const NAV = [
 ]
 
 export default function Sidebar({ user, page, setPage, onLogout }) {
-  const [unreadCount, setUnreadCount] = useState(0)
+  const [dmUnread, setDmUnread] = useState(0)
 
   useEffect(() => {
     fetchUnread()
     const channel = supabase
-      .channel('sidebar_unread')
+      .channel('sidebar_dm_badge')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages' }, payload => {
-        if (payload.new.to_uid === user.id) {
-          setUnreadCount(c => c + 1)
-        }
+        if (payload.new.to_uid === user.id) setDmUnread(c => c + 1)
       })
       .subscribe()
     return () => supabase.removeChannel(channel)
   }, [])
 
-  // Reset badge when viewing DMs
-  useEffect(() => {
-    if (page === 'dms') setUnreadCount(0)
-  }, [page])
+  useEffect(() => { if (page === 'dms') setDmUnread(0) }, [page])
 
   async function fetchUnread() {
     const { count } = await supabase
@@ -42,49 +38,49 @@ export default function Sidebar({ user, page, setPage, onLogout }) {
       .select('*', { count: 'exact', head: true })
       .eq('to_uid', user.id)
       .eq('read', false)
-    setUnreadCount(count || 0)
+    setDmUnread(count || 0)
   }
 
   return (
-    <div style={{ width: 165, background: N, display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100vh' }}>
+    <div style={{ width: 168, background: N, display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100vh' }}>
       <div style={{ padding: '15px 13px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>Castro Agency</div>
         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginTop: 1 }}>Office hub</div>
       </div>
 
-      <nav style={{ flex: 1, padding: '8px 6px', overflowY: 'auto' }}>
+      <nav style={{ flex: 1, padding: '7px 5px', overflowY: 'auto' }}>
         {NAV.map(n => {
           const active = page === n.id
-          const showBadge = n.id === 'dms' && unreadCount > 0 && page !== 'dms'
+          const showBadge = n.id === 'dms' && dmUnread > 0 && page !== 'dms'
           return (
             <div
               key={n.id}
               onClick={() => setPage(n.id)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '8px 9px', borderRadius: 7, cursor: 'pointer', marginBottom: 1,
+                display: 'flex', alignItems: 'center',
+                padding: '7px 9px', borderRadius: 7, cursor: 'pointer', marginBottom: 1,
                 background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
                 color: active ? '#fff' : 'rgba(255,255,255,0.5)',
-                fontSize: 12, fontWeight: active ? 500 : 400,
+                fontSize: 11.5, fontWeight: active ? 500 : 400,
                 justifyContent: 'space-between',
               }}
               onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
               onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13 }}>{n.icon}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ fontSize: 12 }}>{n.icon}</span>
                 {n.label}
               </div>
               {showBadge && (
-                <span style={{ background: R, color: '#fff', borderRadius: 99, fontSize: 9, fontWeight: 700, padding: '1px 6px', flexShrink: 0 }}>{unreadCount}</span>
+                <span style={{ background: R, color: '#fff', borderRadius: 99, fontSize: 9, fontWeight: 700, padding: '1px 6px', flexShrink: 0 }}>{dmUnread}</span>
               )}
             </div>
           )
         })}
       </nav>
 
-      <div style={{ padding: '10px 8px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <div style={{ padding: '9px 7px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
           <div style={{
             width: 28, height: 28, borderRadius: '50%',
             background: user.role === 'admin' ? R : 'rgba(255,255,255,0.2)',
