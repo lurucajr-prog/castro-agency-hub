@@ -7,6 +7,7 @@ import Tasks from './components/Tasks'
 import Referrals from './components/Referrals'
 import Reviews from './components/Reviews'
 import Sales from './components/Sales'
+import LeadReturns from './components/LeadReturns'
 import Cancellations from './components/Cancellations'
 import Renewals from './components/Renewals'
 import Learning from './components/Learning'
@@ -64,6 +65,7 @@ export default function App() {
     referrals:     Referrals,
     reviews:       Reviews,
     sales:         Sales,
+    'lead-returns': LeadReturns,
     cancellations: Cancellations,
     renewals:      Renewals,
     learning:      Learning,
@@ -71,8 +73,6 @@ export default function App() {
     dms:           DirectMessages,
   }
   const PageComponent = pages[page] || Dashboard
-
-  // Chat and DMs use full height without scroll wrapper
   const fullHeight = ['chat', 'dms'].includes(page)
 
   return (
