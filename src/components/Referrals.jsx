@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { N, Card, Btn, Field, Chip, Spinner, EmptyState, IS } from './shared'
 
-const STATUSES = ['New Lead', 'Contacted', 'Quoted', 'Sold', 'Lost']
+const STATUSES = ['New Lead', 'Contacted', 'Quoted', 'Sold', 'Not Interested']
 
 export default function Referrals() {
   const [refs, setRefs] = useState([])
@@ -47,7 +47,7 @@ export default function Referrals() {
     total: refs.length,
     sold: refs.filter(r => r.status === 'Sold').length,
     pipeline: refs.filter(r => ['New Lead', 'Contacted', 'Quoted'].includes(r.status)).length,
-    lost: refs.filter(r => r.status === 'Lost').length,
+    notInterested: refs.filter(r => r.status === 'Not Interested').length,
   }
 
   return (
@@ -83,7 +83,7 @@ export default function Referrals() {
             </div>
           </Card>
 
-          {/* Filter tabs */}
+          {/* Filter pills */}
           <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
             {['All', ...STATUSES].map(s => (
               <button key={s} onClick={() => setFilter(s)} style={{
@@ -145,7 +145,7 @@ export default function Referrals() {
           </Card>
         </div>
 
-        {/* Sidebar */}
+        {/* Sidebar stats */}
         <div>
           <Card mb={10}>
             <div style={{ fontSize: 12, fontWeight: 500, color: '#111', marginBottom: 10 }}>Top referrers</div>
@@ -165,7 +165,7 @@ export default function Referrals() {
               { label: 'Total', val: statCounts.total },
               { label: 'Sold', val: statCounts.sold, c: '#166534' },
               { label: 'Pipeline', val: statCounts.pipeline, c: '#92400e' },
-              { label: 'Lost', val: statCounts.lost, c: '#991b1b' },
+              { label: 'Not Interested', val: statCounts.notInterested, c: '#991b1b' },
             ].map((s, i, a) => (
               <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: i < a.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
                 <span style={{ fontSize: 11, color: '#6b7280' }}>{s.label}</span>
