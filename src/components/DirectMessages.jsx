@@ -2,41 +2,78 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { N, R, Spinner } from './shared'
 
-export default function DirectMessages({ user }) {
+// Request browser notification permission
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) return false
+  if (Notification.permission === 'granted') return true
+  if (Notification.permission === 'denied') return false
+  const result = await Notification.requestPermission()
+  return result === 'granted'
+}
+
+function showNotification(title, body, onClick) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  const n = new Notification(title, {
+    body,
+    icon: '/favicon.ico',
+    badge: '/favicon.ico',
+    tag: 'castro-dm',
+  })
+  n.onclick = () => { window.focus(); n.close(); onClick?.() }
+  setTimeout(() => n.close(), 6000)
+}
+
+export default function DirectMessages({ user, setPage }) {
   const [profiles, setProfiles] = useState([])
   const [selected, setSelected] = useState(null)
-  const [conversations, setConversations] = useState({}) // uid -> messages[]
+  const [conversations, setConversations] = useState({})
   const [text, setText] = useState('')
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [lightbox, setLightbox] = useState(null)
-  const [unread, setUnread] = useState({}) // uid -> count
+  const [unread, setUnread] = useState({})
+  const [notifEnabled, setNotifEnabled] = useState(Notification?.permission === 'granted')
   const endRef = useRef(null)
   const fileRef = useRef(null)
+  const selectedRef = useRef(null)
+
+  // Keep selectedRef in sync so real-time handler can access it
+  useEffect(() => { selectedRef.current = selected }, [selected])
 
   useEffect(() => {
     fetchData()
 
-    // Real-time subscription for incoming DMs
     const channel = supabase
-      .channel('direct_messages')
+      .channel('direct_messages_live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages' }, payload => {
         const msg = payload.new
-        // Only update if relevant to current user
         if (msg.from_uid === user.id || msg.to_uid === user.id) {
           const otherUid = msg.from_uid === user.id ? msg.to_uid : msg.from_uid
           setConversations(prev => ({
             ...prev,
             [otherUid]: [...(prev[otherUid] || []), msg],
           }))
-          // Mark as unread if not currently viewing this conversation
+
+          // Handle incoming messages (not from self)
           if (msg.from_uid !== user.id) {
-            setSelected(sel => {
-              if (sel?.id !== otherUid) {
-                setUnread(u => ({ ...u, [otherUid]: (u[otherUid] || 0) + 1 }))
-              }
-              return sel
-            })
+            const currentSel = selectedRef.current
+            if (currentSel?.id !== otherUid) {
+              // Increment unread badge
+              setUnread(u => ({ ...u, [otherUid]: (u[otherUid] || 0) + 1 }))
+
+              // Show browser notification
+              setProfiles(profs => {
+                const sender = profs.find(p => p.id === msg.from_uid)
+                if (sender) {
+                  showNotification(
+                    `New message from ${sender.name}`,
+                    msg.image_url && !msg.text ? '📷 Sent an image' : msg.text,
+                    () => setPage?.('dms')
+                  )
+                }
+                return profs
+              })
+            }
           }
         }
       })
@@ -57,10 +94,8 @@ export default function DirectMessages({ user }) {
         .or(`from_uid.eq.${user.id},to_uid.eq.${user.id}`)
         .order('created_at', { ascending: true }),
     ])
-
     setProfiles(p.data || [])
 
-    // Group messages by conversation partner
     const grouped = {}
     ;(msgs.data || []).forEach(m => {
       const otherUid = m.from_uid === user.id ? m.to_uid : m.from_uid
@@ -69,7 +104,6 @@ export default function DirectMessages({ user }) {
     })
     setConversations(grouped)
 
-    // Count unread
     const unreadCounts = {}
     ;(msgs.data || []).forEach(m => {
       if (m.to_uid === user.id && !m.read) {
@@ -83,14 +117,11 @@ export default function DirectMessages({ user }) {
   async function selectConversation(profile) {
     setSelected(profile)
     setText('')
-
-    // Mark messages from this person as read
     await supabase.from('direct_messages')
       .update({ read: true })
       .eq('from_uid', profile.id)
       .eq('to_uid', user.id)
       .eq('read', false)
-
     setUnread(u => ({ ...u, [profile.id]: 0 }))
   }
 
@@ -144,6 +175,12 @@ export default function DirectMessages({ user }) {
     }))
   }
 
+  async function enableNotifications() {
+    const granted = await requestNotificationPermission()
+    setNotifEnabled(granted)
+    if (!granted) alert('Notification permission was denied. You can enable it in your browser settings.')
+  }
+
   function onKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
@@ -160,19 +197,28 @@ export default function DirectMessages({ user }) {
 
   const teammates = profiles.filter(p => p.id !== user.id)
   const currentMsgs = selected ? (conversations[selected.id] || []) : []
-  const totalUnread = Object.values(unread).reduce((a, b) => a + b, 0)
 
   return (
     <>
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-        {/* Sidebar — teammate list */}
-        <div style={{ width: 240, borderRight: '1px solid #e5e7eb', background: '#fff', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        {/* Sidebar */}
+        <div style={{ width: 250, borderRight: '1px solid #e5e7eb', background: '#fff', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid #f3f4f6' }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>
-              Direct messages
-              {totalUnread > 0 && <span style={{ marginLeft: 8, background: R, color: '#fff', borderRadius: 99, fontSize: 10, fontWeight: 600, padding: '1px 7px' }}>{totalUnread}</span>}
-            </div>
-            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>Private conversations</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#111', marginBottom: 8 }}>Direct messages</div>
+            {/* Notification toggle */}
+            {!notifEnabled ? (
+              <button
+                onClick={enableNotifications}
+                style={{ width: '100%', padding: '7px 10px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 7, cursor: 'pointer', fontSize: 11, color: '#1e40af', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                🔔 Enable notifications
+              </button>
+            ) : (
+              <div style={{ fontSize: 11, color: '#16a34a', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#16a34a' }} />
+                Notifications on
+              </div>
+            )}
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -196,20 +242,21 @@ export default function DirectMessages({ user }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <div style={{ position: 'relative', flexShrink: 0 }}>
                       <div style={{
-                        width: 36, height: 36, borderRadius: '50%',
+                        width: 38, height: 38, borderRadius: '50%',
                         background: p.role === 'admin' ? R : '#dbeafe',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 11, fontWeight: 600, color: p.role === 'admin' ? '#fff' : '#1e40af',
                       }}>{p.ini}</div>
-                      {/* Online dot (decorative) */}
                       <div style={{ position: 'absolute', bottom: 1, right: 1, width: 9, height: 9, borderRadius: '50%', background: '#16a34a', border: '2px solid #fff' }} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 13, fontWeight: uCount > 0 ? 600 : 500, color: '#111' }}>{p.name}</span>
-                        {uCount > 0 && <span style={{ background: R, color: '#fff', borderRadius: 99, fontSize: 9, fontWeight: 700, padding: '1px 6px', flexShrink: 0 }}>{uCount}</span>}
+                        <span style={{ fontSize: 13, fontWeight: uCount > 0 ? 700 : 500, color: '#111' }}>{p.name}</span>
+                        {uCount > 0 && (
+                          <span style={{ background: R, color: '#fff', borderRadius: 99, fontSize: 9, fontWeight: 700, padding: '2px 6px', flexShrink: 0 }}>{uCount}</span>
+                        )}
                       </div>
-                      <div style={{ fontSize: 11, color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: 11, color: uCount > 0 ? '#374151' : '#9ca3af', fontWeight: uCount > 0 ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {last ? (last.image_url && !last.text ? '📷 Image' : last.text) : 'No messages yet'}
                       </div>
                     </div>
@@ -220,10 +267,10 @@ export default function DirectMessages({ user }) {
           </div>
         </div>
 
-        {/* Main area */}
+        {/* Main conversation area */}
         {!selected ? (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f9fafb', flexDirection: 'column', gap: 12 }}>
-            <div style={{ fontSize: 36 }}>💬</div>
+            <div style={{ fontSize: 40 }}>💬</div>
             <div style={{ fontSize: 15, fontWeight: 500, color: '#374151' }}>Select a teammate to message</div>
             <div style={{ fontSize: 13, color: '#9ca3af' }}>Your conversations are private</div>
           </div>
@@ -232,14 +279,14 @@ export default function DirectMessages({ user }) {
             {/* Header */}
             <div style={{ padding: '12px 18px', borderBottom: '1px solid #e5e7eb', background: '#fff', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
               <div style={{
-                width: 36, height: 36, borderRadius: '50%',
+                width: 38, height: 38, borderRadius: '50%',
                 background: selected.role === 'admin' ? R : '#dbeafe',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 600, color: selected.role === 'admin' ? '#fff' : '#1e40af',
+                fontSize: 12, fontWeight: 600, color: selected.role === 'admin' ? '#fff' : '#1e40af',
               }}>{selected.ini}</div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#111' }}>{selected.name}</div>
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>{selected.title}</div>
+                <div style={{ fontSize: 11, color: '#6b7280' }}>{selected.title} · Private message</div>
               </div>
             </div>
 
@@ -253,29 +300,31 @@ export default function DirectMessages({ user }) {
               {currentMsgs.map((m, idx) => {
                 const isMe = m.from_uid === user.id
                 const sender = profiles.find(p => p.id === m.from_uid)
-                const showDelete = isMe || user.role === 'admin'
+                const canDelete = isMe || user.role === 'admin'
                 return (
-                  <div key={m.id || idx} style={{ display: 'flex', gap: 9, flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}
+                  <div
+                    key={m.id || idx}
+                    style={{ display: 'flex', gap: 9, flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start' }}
                     onMouseEnter={e => { const btn = e.currentTarget.querySelector('.del-btn'); if (btn) btn.style.opacity = '1' }}
                     onMouseLeave={e => { const btn = e.currentTarget.querySelector('.del-btn'); if (btn) btn.style.opacity = '0' }}
                   >
                     <div style={{
-                      width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                      width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
                       background: sender?.role === 'admin' ? R : '#dbeafe',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 9, fontWeight: 600, color: sender?.role === 'admin' ? '#fff' : '#1e40af',
+                      fontSize: 10, fontWeight: 600, color: sender?.role === 'admin' ? '#fff' : '#1e40af',
                     }}>{sender?.ini}</div>
-                    <div style={{ maxWidth: '68%' }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexDirection: isMe ? 'row-reverse' : 'row', marginBottom: 3 }}>
+                    <div style={{ maxWidth: '70%' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: isMe ? 'row-reverse' : 'row', marginBottom: 3 }}>
                         <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>{isMe ? 'You' : sender?.name}</span>
                         <span style={{ fontSize: 10, color: '#9ca3af' }}>{formatTime(m.created_at)}</span>
-                        {showDelete && (
+                        {canDelete && (
                           <button className="del-btn" onClick={() => deleteMessage(m.id, selected.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11, color: '#ef4444', opacity: 0, padding: 0, transition: 'opacity 0.1s' }}>🗑</button>
                         )}
                       </div>
                       {m.image_url && (
                         <div style={{ marginBottom: m.text ? 6 : 0 }}>
-                          <img src={m.image_url} alt="shared" onClick={() => setLightbox(m.image_url)} style={{ maxWidth: 240, maxHeight: 180, borderRadius: 10, cursor: 'zoom-in', display: 'block', border: '1px solid #e5e7eb', objectFit: 'cover' }} />
+                          <img src={m.image_url} alt="shared" onClick={() => setLightbox(m.image_url)} style={{ maxWidth: 260, maxHeight: 200, borderRadius: 10, cursor: 'zoom-in', display: 'block', border: '1px solid #e5e7eb', objectFit: 'cover' }} />
                         </div>
                       )}
                       {m.text && (
@@ -303,7 +352,7 @@ export default function DirectMessages({ user }) {
                   onChange={e => setText(e.target.value)}
                   onKeyDown={onKey}
                   onPaste={handlePaste}
-                  placeholder={`Message ${selected.name}… (or paste image)`}
+                  placeholder={`Message ${selected.name}… (or paste image with Ctrl+V)`}
                   disabled={uploading}
                   style={{ flex: 1, fontSize: 13, padding: '9px 15px', border: '1px solid #e5e7eb', borderRadius: 22, background: '#f9fafb', color: '#111', outline: 'none' }}
                 />
