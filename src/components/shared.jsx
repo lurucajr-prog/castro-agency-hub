@@ -6,7 +6,7 @@ export const CHIP_COLORS = {
   'Contacted':     { bg: '#FAEEDA', tx: '#633806' },
   'Quoted':        { bg: '#E6F1FB', tx: '#0C447C' },
   'Sold':          { bg: '#EAF3DE', tx: '#27500A' },
-  'Lost':          { bg: '#FCEBEB', tx: '#791F1F' },
+  'Not Interested':{ bg: '#FCEBEB', tx: '#791F1F' },
   'Left a Review': { bg: '#EAF3DE', tx: '#27500A' },
   'Pending':       { bg: '#FAEEDA', tx: '#633806' },
   'Declined':      { bg: '#FCEBEB', tx: '#791F1F' },
@@ -18,6 +18,7 @@ export const CHIP_COLORS = {
   'Auto':          { bg: '#E6F1FB', tx: '#0C447C' },
   'Home':          { bg: '#EAF3DE', tx: '#27500A' },
   'Life':          { bg: '#EEEDFE', tx: '#3C3489' },
+  'Renters':       { bg: '#E6F1FB', tx: '#0C447C' },
   'Other':         { bg: '#F1EFE8', tx: '#5F5E5A' },
 }
 
@@ -57,9 +58,9 @@ export function Btn({ children, variant = 'primary', sm = false, style: st = {},
   }
   const vs = {
     primary: { background: N, color: '#fff' },
-    outline:  { background: 'transparent', color: N, border: `1px solid ${N}` },
-    ghost:    { background: 'transparent', color: '#6b7280' },
-    danger:   { background: R, color: '#fff' },
+    outline: { background: 'transparent', color: N, border: `1px solid ${N}` },
+    ghost:   { background: 'transparent', color: '#6b7280' },
+    danger:  { background: R, color: '#fff' },
   }
   return <button {...props} style={{ ...base, ...vs[variant], ...st }}>{children}</button>
 }
@@ -73,10 +74,11 @@ export function Field({ label, children }) {
   )
 }
 
+// Modal no longer closes on backdrop click — only X button or Cancel
+// This prevents accidental data loss when clicking near the edge
 export function Modal({ title, onClose, children, width = 440 }) {
   return (
     <div
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(15,29,53,0.5)',
         display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
@@ -92,7 +94,10 @@ export function Modal({ title, onClose, children, width = 440 }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <span style={{ fontSize: 14, fontWeight: 500, color: '#111' }}>{title}</span>
-          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af', lineHeight: 1 }}>×</button>
+          <button
+            onClick={onClose}
+            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af', lineHeight: 1, padding: '0 4px' }}
+          >×</button>
         </div>
         <div style={{ padding: 18 }}>{children}</div>
       </div>
