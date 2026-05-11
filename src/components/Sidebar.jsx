@@ -2,22 +2,29 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { N, R } from './shared'
 
-const NAV = [
-  { id: 'dashboard',     label: 'Dashboard',    icon: '◉' },
-  { id: 'tasks',         label: 'Tasks',         icon: '☑' },
-  { id: 'referrals',     label: 'Referrals',     icon: '↗' },
-  { id: 'reviews',       label: 'Reviews',       icon: '★' },
-  { id: 'sales',         label: 'Sales',         icon: '$' },
-  { id: 'lead-returns',  label: 'Lead Returns',  icon: '🎯' },
-  { id: 'cancellations', label: 'Cancellations', icon: '⚠' },
-  { id: 'renewals',      label: 'Renewals',      icon: '↻' },
-  { id: 'learning',      label: 'Learning',      icon: '📚' },
-  { id: 'chat',          label: 'Team chat',     icon: '◎' },
-  { id: 'dms',           label: 'Messages',      icon: '💬' },
+// Users who can see Live Lead Recap
+const LIVE_LEAD_USERS = ['Luis', 'Jr', 'Juana', 'Destiny']
+
+const NAV_ALL = [
+  { id: 'dashboard',     label: 'Dashboard',       icon: '◉' },
+  { id: 'tasks',         label: 'Tasks',            icon: '☑' },
+  { id: 'referrals',     label: 'Referrals',        icon: '↗' },
+  { id: 'reviews',       label: 'Reviews',          icon: '★' },
+  { id: 'sales',         label: 'Sales',            icon: '$' },
+  { id: 'lead-returns',  label: 'Lead Returns',     icon: '🎯' },
+  { id: 'live-leads',    label: 'Live Lead Recap',  icon: '⚡', restricted: true },
+  { id: 'cancellations', label: 'Cancellations',    icon: '⚠' },
+  { id: 'renewals',      label: 'Renewals',         icon: '↻' },
+  { id: 'learning',      label: 'Learning',         icon: '📚' },
+  { id: 'chat',          label: 'Team chat',        icon: '◎' },
+  { id: 'dms',           label: 'Messages',         icon: '💬' },
 ]
 
 export default function Sidebar({ user, page, setPage, onLogout }) {
   const [dmUnread, setDmUnread] = useState(0)
+
+  const canSeeLiveLeads = LIVE_LEAD_USERS.includes(user.name)
+  const NAV = NAV_ALL.filter(n => !n.restricted || canSeeLiveLeads)
 
   useEffect(() => {
     fetchUnread()
@@ -42,8 +49,8 @@ export default function Sidebar({ user, page, setPage, onLogout }) {
   }
 
   return (
-    <div style={{ width: 168, background: N, display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100vh' }}>
-      <div style={{ padding: '15px 13px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+    <div style={{ width: 170, background: N, display: 'flex', flexDirection: 'column', flexShrink: 0, height: '100vh' }}>
+      <div style={{ padding: '14px 13px 11px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <div style={{ color: '#fff', fontSize: 13, fontWeight: 600 }}>Castro Agency</div>
         <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginTop: 1 }}>Office hub</div>
       </div>
@@ -52,28 +59,36 @@ export default function Sidebar({ user, page, setPage, onLogout }) {
         {NAV.map(n => {
           const active = page === n.id
           const showBadge = n.id === 'dms' && dmUnread > 0 && page !== 'dms'
+
+          // Visual separator before Live Lead Recap
+          const showDivider = n.id === 'live-leads'
+
           return (
-            <div
-              key={n.id}
-              onClick={() => setPage(n.id)}
-              style={{
-                display: 'flex', alignItems: 'center',
-                padding: '7px 9px', borderRadius: 7, cursor: 'pointer', marginBottom: 1,
-                background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
-                color: active ? '#fff' : 'rgba(255,255,255,0.5)',
-                fontSize: 11.5, fontWeight: active ? 500 : 400,
-                justifyContent: 'space-between',
-              }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
-              onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{ fontSize: 12 }}>{n.icon}</span>
-                {n.label}
-              </div>
-              {showBadge && (
-                <span style={{ background: R, color: '#fff', borderRadius: 99, fontSize: 9, fontWeight: 700, padding: '1px 6px', flexShrink: 0 }}>{dmUnread}</span>
+            <div key={n.id}>
+              {showDivider && (
+                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '5px 4px', borderRadius: 99 }} />
               )}
+              <div
+                onClick={() => setPage(n.id)}
+                style={{
+                  display: 'flex', alignItems: 'center',
+                  padding: '7px 9px', borderRadius: 7, cursor: 'pointer', marginBottom: 1,
+                  background: active ? 'rgba(255,255,255,0.12)' : 'transparent',
+                  color: active ? '#fff' : 'rgba(255,255,255,0.55)',
+                  fontSize: 11.5, fontWeight: active ? 500 : 400,
+                  justifyContent: 'space-between',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{ fontSize: 12 }}>{n.icon}</span>
+                  {n.label}
+                </div>
+                {showBadge && (
+                  <span style={{ background: R, color: '#fff', borderRadius: 99, fontSize: 9, fontWeight: 700, padding: '1px 6px', flexShrink: 0 }}>{dmUnread}</span>
+                )}
+              </div>
             </div>
           )
         })}
