@@ -4,6 +4,58 @@ import { N, Card, Btn, Field, Chip, Spinner, EmptyState, IS } from './shared'
 
 const STATUSES = ['New Lead', 'Contacted', 'Quoted', 'Sold', 'Not Interested']
 
+// ── Confetti ──────────────────────────────────────────────────
+function launchConfetti() {
+  const canvas = document.createElement('canvas')
+  canvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999'
+  document.body.appendChild(canvas)
+  canvas.width = window.innerWidth
+  canvas.height = window.innerHeight
+  const ctx = canvas.getContext('2d')
+  const colors = ['#C8102E','#1B3A6B','#FFD700','#16a34a','#f97316','#8b5cf6','#ec4899']
+  const particles = Array.from({ length: 150 }, () => ({
+    x: Math.random() * canvas.width,
+    y: -20 - Math.random() * 80,
+    w: Math.random() * 12 + 5, h: Math.random() * 6 + 4,
+    color: colors[Math.floor(Math.random() * colors.length)],
+    speed: Math.random() * 5 + 2, angle: Math.random() * 360,
+    spin: (Math.random() - 0.5) * 10, drift: (Math.random() - 0.5) * 3, opacity: 1,
+  }))
+  let frame = 0
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    particles.forEach(p => {
+      p.y += p.speed; p.x += p.drift; p.angle += p.spin
+      if (frame > 130) p.opacity = Math.max(0, p.opacity - 0.016)
+      ctx.save(); ctx.globalAlpha = p.opacity
+      ctx.translate(p.x, p.y); ctx.rotate(p.angle * Math.PI / 180)
+      ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h)
+      ctx.restore()
+    })
+    frame++
+    if (frame < 210) requestAnimationFrame(animate)
+    else if (canvas.parentNode) document.body.removeChild(canvas)
+  }
+  animate()
+}
+
+function ReferralSoldToast({ prospect, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t) }, [])
+  return (
+    <div style={{
+      position: 'fixed', top: 80, left: '50%', transform: 'translateX(-50%)',
+      background: '#fff', border: '2px solid #16a34a', borderRadius: 16,
+      padding: '18px 32px', zIndex: 9998, textAlign: 'center',
+      boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'toastIn 0.4s ease', minWidth: 260,
+    }}>
+      <style>{`@keyframes toastIn{from{transform:translateX(-50%) translateY(-30px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}`}</style>
+      <div style={{ fontSize: 40, marginBottom: 8 }}>🤝</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: '#166534', marginBottom: 4 }}>Referral closed!</div>
+      <div style={{ fontSize: 13, color: '#374151' }}>{prospect} — marked as Sold</div>
+    </div>
+  )
+}
+
 export default function Referrals() {
   const [refs, setRefs] = useState([])
   const [loading, setLoading] = useState(true)
@@ -11,6 +63,7 @@ export default function Referrals() {
   const [expanded, setExpanded] = useState(null)
   const [form, setForm] = useState({ referred_by: '', prospect: '', phone: '', status: 'New Lead' })
   const [saving, setSaving] = useState(false)
+  const [soldToast, setSoldToast] = useState(null)
 
   useEffect(() => { fetchRefs() }, [])
 
@@ -31,9 +84,13 @@ export default function Referrals() {
     setSaving(false)
   }
 
-  async function updateStatus(id, status) {
+  async function updateStatus(id, status, prospectName) {
     await supabase.from('referrals').update({ status }).eq('id', id)
     setRefs(rs => rs.map(r => r.id === id ? { ...r, status } : r))
+    if (status === 'Sold') {
+      launchConfetti()
+      setSoldToast(prospectName)
+    }
   }
 
   if (loading) return <Spinner />
@@ -51,54 +108,40 @@ export default function Referrals() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 18, fontWeight: 600, color: '#111', marginBottom: 2 }}>Referral tracker</div>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>Log referrals quickly — even mid-call</div>
-      </div>
+    <>
+      <div style={{ padding: 20 }}>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 18, fontWeight: 600, color: '#111', marginBottom: 2 }}>Referral tracker</div>
+          <div style={{ fontSize: 12, color: '#6b7280' }}>Log referrals quickly — even mid-call</div>
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 175px', gap: 12 }}>
-        <div>
-          {/* Quick add */}
-          <Card mb={12}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: '#111', marginBottom: 11 }}>Quick add</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
-              <Field label="Referred by *">
-                <input style={IS} value={form.referred_by} onChange={e => setForm(f => ({ ...f, referred_by: e.target.value }))} placeholder="Client name" />
-              </Field>
-              <Field label="Prospect *">
-                <input style={IS} value={form.prospect} onChange={e => setForm(f => ({ ...f, prospect: e.target.value }))} placeholder="Prospect name" />
-              </Field>
-              <Field label="Phone / email">
-                <input style={IS} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Optional" />
-              </Field>
-              <Field label="Status">
-                <select style={IS} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
-                  {STATUSES.map(o => <option key={o}>{o}</option>)}
-                </select>
-              </Field>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 175px', gap: 12 }}>
+          <div>
+            <Card mb={12}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: '#111', marginBottom: 11 }}>Quick add</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
+                <Field label="Referred by *"><input style={IS} value={form.referred_by} onChange={e => setForm(f => ({ ...f, referred_by: e.target.value }))} placeholder="Client name" /></Field>
+                <Field label="Prospect *"><input style={IS} value={form.prospect} onChange={e => setForm(f => ({ ...f, prospect: e.target.value }))} placeholder="Prospect name" /></Field>
+                <Field label="Phone / email"><input style={IS} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Optional" /></Field>
+                <Field label="Status">
+                  <select style={IS} value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                    {STATUSES.map(o => <option key={o}>{o}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Btn onClick={addRef} disabled={saving}>{saving ? 'Saving…' : '+ Log referral'}</Btn>
+              </div>
+            </Card>
+
+            <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
+              {['All', ...STATUSES].map(s => (
+                <button key={s} onClick={() => setFilter(s)} style={{ padding: '3px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 500, background: filter === s ? N : '#f3f4f6', color: filter === s ? '#fff' : '#6b7280' }}>{s}</button>
+              ))}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Btn onClick={addRef} disabled={saving}>{saving ? 'Saving…' : '+ Log referral'}</Btn>
-            </div>
-          </Card>
 
-          {/* Filter pills */}
-          <div style={{ display: 'flex', gap: 5, marginBottom: 10, flexWrap: 'wrap' }}>
-            {['All', ...STATUSES].map(s => (
-              <button key={s} onClick={() => setFilter(s)} style={{
-                padding: '3px 11px', borderRadius: 99, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 500,
-                background: filter === s ? N : '#f3f4f6',
-                color: filter === s ? '#fff' : '#6b7280',
-              }}>{s}</button>
-            ))}
-          </div>
-
-          {/* Table */}
-          <Card p={0}>
-            {filtered.length === 0
-              ? <EmptyState text="No referrals found." />
-              : (
+            <Card p={0}>
+              {filtered.length === 0 ? <EmptyState text="No referrals found." /> : (
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#f9fafb' }}>
@@ -124,12 +167,7 @@ export default function Referrals() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 500 }}>Update status:</span>
                                 {STATUSES.map(s => (
-                                  <button key={s} onClick={() => updateStatus(r.id, s)} style={{
-                                    padding: '3px 9px', borderRadius: 99, cursor: 'pointer', fontSize: 11,
-                                    border: `1px solid ${r.status === s ? N : '#d1d5db'}`,
-                                    background: r.status === s ? N : 'transparent',
-                                    color: r.status === s ? '#fff' : '#6b7280',
-                                  }}>{s}</button>
+                                  <button key={s} onClick={() => updateStatus(r.id, s, r.prospect)} style={{ padding: '3px 9px', borderRadius: 99, cursor: 'pointer', fontSize: 11, border: `1px solid ${r.status === s ? N : '#d1d5db'}`, background: r.status === s ? N : 'transparent', color: r.status === s ? '#fff' : '#6b7280' }}>{s}</button>
                                 ))}
                                 {r.phone && <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>📞 {r.phone}</span>}
                               </div>
@@ -140,41 +178,42 @@ export default function Referrals() {
                     })}
                   </tbody>
                 </table>
-              )
-            }
-          </Card>
-        </div>
+              )}
+            </Card>
+          </div>
 
-        {/* Sidebar stats */}
-        <div>
-          <Card mb={10}>
-            <div style={{ fontSize: 12, fontWeight: 500, color: '#111', marginBottom: 10 }}>Top referrers</div>
-            {top.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: 8 }}>None yet.</div>}
-            {top.map(([name, count], i) => (
-              <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: i < top.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ fontSize: 11 }}>{['🥇','🥈','🥉','4.','5.'][i]}</span>
-                  <span style={{ fontSize: 11, color: '#111' }}>{name.split(',')[0]}</span>
+          <div>
+            <Card mb={10}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: '#111', marginBottom: 10 }}>Top referrers</div>
+              {top.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: 8 }}>None yet.</div>}
+              {top.map(([name, count], i) => (
+                <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: i < top.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ fontSize: 11 }}>{['🥇','🥈','🥉','4.','5.'][i]}</span>
+                    <span style={{ fontSize: 11, color: '#111' }}>{name.split(',')[0]}</span>
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 500, color: N }}>{count}</span>
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 500, color: N }}>{count}</span>
-              </div>
-            ))}
-          </Card>
-          <Card>
-            {[
-              { label: 'Total', val: statCounts.total },
-              { label: 'Sold', val: statCounts.sold, c: '#166534' },
-              { label: 'Pipeline', val: statCounts.pipeline, c: '#92400e' },
-              { label: 'Not Interested', val: statCounts.notInterested, c: '#991b1b' },
-            ].map((s, i, a) => (
-              <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: i < a.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                <span style={{ fontSize: 11, color: '#6b7280' }}>{s.label}</span>
-                <span style={{ fontSize: 12, fontWeight: 500, color: s.c || '#111' }}>{s.val}</span>
-              </div>
-            ))}
-          </Card>
+              ))}
+            </Card>
+            <Card>
+              {[
+                { label: 'Total', val: statCounts.total },
+                { label: 'Sold', val: statCounts.sold, c: '#166534' },
+                { label: 'Pipeline', val: statCounts.pipeline, c: '#92400e' },
+                { label: 'Not Interested', val: statCounts.notInterested, c: '#991b1b' },
+              ].map((s, i, a) => (
+                <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: i < a.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                  <span style={{ fontSize: 11, color: '#6b7280' }}>{s.label}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: s.c || '#111' }}>{s.val}</span>
+                </div>
+              ))}
+            </Card>
+          </div>
         </div>
       </div>
-    </div>
+
+      {soldToast && <ReferralSoldToast prospect={soldToast} onDone={() => setSoldToast(null)} />}
+    </>
   )
 }
