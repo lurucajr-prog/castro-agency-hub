@@ -2,27 +2,24 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { N, R } from './shared'
 
-// Users who can see Live Lead Recap
 const LIVE_LEAD_USERS = ['Luis', 'Jr', 'Juana', 'Destiny']
 
 const NAV_ALL = [
-  { id: 'dashboard',     label: 'Dashboard',       icon: '◉' },
-  { id: 'tasks',         label: 'Tasks',            icon: '☑' },
-  { id: 'referrals',     label: 'Referrals',        icon: '↗' },
-  { id: 'reviews',       label: 'Reviews',          icon: '★' },
-  { id: 'sales',         label: 'Sales',            icon: '$' },
-  { id: 'lead-returns',  label: 'Lead Returns',     icon: '🎯' },
-  { id: 'live-leads',    label: 'Live Lead Recap',  icon: '⚡', restricted: true },
-  { id: 'cancellations', label: 'Cancellations',    icon: '⚠' },
-  { id: 'renewals',      label: 'Renewals',         icon: '↻' },
-  { id: 'learning',      label: 'Learning',         icon: '📚' },
-  { id: 'chat',          label: 'Team chat',        icon: '◎' },
-  { id: 'dms',           label: 'Messages',         icon: '💬' },
+  { id: 'dashboard',     label: 'Dashboard',      icon: '◉' },
+  { id: 'tasks',         label: 'Tasks',           icon: '☑' },
+  { id: 'referrals',     label: 'Referrals',       icon: '↗' },
+  { id: 'reviews',       label: 'Reviews',         icon: '★' },
+  { id: 'sales',         label: 'Sales',           icon: '$' },
+  { id: 'live-leads',    label: 'Live Lead Recap', icon: '⚡', restricted: true },
+  { id: 'cancellations', label: 'Cancellations',   icon: '⚠' },
+  { id: 'renewals',      label: 'Renewals',        icon: '↻' },
+  { id: 'learning',      label: 'Learning',        icon: '📚' },
+  { id: 'chat',          label: 'Team chat',       icon: '◎' },
+  { id: 'dms',           label: 'Messages',        icon: '💬' },
 ]
 
 export default function Sidebar({ user, page, setPage, onLogout }) {
   const [dmUnread, setDmUnread] = useState(0)
-
   const canSeeLiveLeads = LIVE_LEAD_USERS.includes(user.name)
   const NAV = NAV_ALL.filter(n => !n.restricted || canSeeLiveLeads)
 
@@ -59,15 +56,10 @@ export default function Sidebar({ user, page, setPage, onLogout }) {
         {NAV.map(n => {
           const active = page === n.id
           const showBadge = n.id === 'dms' && dmUnread > 0 && page !== 'dms'
-
-          // Visual separator before Live Lead Recap
           const showDivider = n.id === 'live-leads'
-
           return (
             <div key={n.id}>
-              {showDivider && (
-                <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '5px 4px', borderRadius: 99 }} />
-              )}
+              {showDivider && <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '5px 4px' }} />}
               <div
                 onClick={() => setPage(n.id)}
                 style={{
