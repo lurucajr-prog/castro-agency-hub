@@ -7,7 +7,6 @@ import Tasks from './components/Tasks'
 import Referrals from './components/Referrals'
 import Reviews from './components/Reviews'
 import Sales from './components/Sales'
-import LeadReturns from './components/LeadReturns'
 import LiveLeads from './components/LiveLeads'
 import Cancellations from './components/Cancellations'
 import Renewals from './components/Renewals'
@@ -61,18 +60,17 @@ export default function App() {
   if (!session || !profile) return <Login />
 
   const pages = {
-    dashboard:     Dashboard,
-    tasks:         Tasks,
-    referrals:     Referrals,
-    reviews:       Reviews,
-    sales:         Sales,
-    'lead-returns': LeadReturns,
-    'live-leads':  LiveLeads,
-    cancellations: Cancellations,
-    renewals:      Renewals,
-    learning:      Learning,
-    chat:          Chat,
-    dms:           DirectMessages,
+    dashboard:    Dashboard,
+    tasks:        Tasks,
+    referrals:    Referrals,
+    reviews:      Reviews,
+    sales:        Sales,
+    'live-leads': LiveLeads,
+    cancellations:Cancellations,
+    renewals:     Renewals,
+    learning:     Learning,
+    chat:         Chat,
+    dms:          DirectMessages,
   }
   const PageComponent = pages[page] || Dashboard
   const fullHeight = ['chat', 'dms'].includes(page)
