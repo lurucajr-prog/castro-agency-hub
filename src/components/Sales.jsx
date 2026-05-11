@@ -3,7 +3,8 @@ import { supabase } from '../lib/supabase'
 import { N, Card, Btn, Field, Modal, Chip, Spinner, TabBar, EmptyState, IS, MiniBar, pct, pcol } from './shared'
 
 const MEDALS = ['🥇','🥈','🥉','4','5','6','7']
-const LEAD_SOURCES = ['Walk-in', 'Phone call', 'Online', 'Referral', 'Allstate portal', 'Social media', 'Other']
+
+const LEAD_SOURCES = ['BP', 'Allstate Lead Marketplace', 'Other']
 const LEAD_STATUSES = ['New', 'Contacted', 'Quoted', 'Sold', 'Lost']
 const LEAD_STATUS_COLORS = {
   'New':       { bg: '#f3f4f6', tx: '#374151' },
@@ -11,6 +12,11 @@ const LEAD_STATUS_COLORS = {
   'Quoted':    { bg: '#fef9c3', tx: '#854d0e' },
   'Sold':      { bg: '#dcfce7', tx: '#166534' },
   'Lost':      { bg: '#fee2e2', tx: '#991b1b' },
+}
+const LEAD_SOURCE_COLORS = {
+  'BP':                      { bg: '#ede9fe', tx: '#5b21b6' },
+  'Allstate Lead Marketplace':{ bg: '#dbeafe', tx: '#1e40af' },
+  'Other':                   { bg: '#f3f4f6', tx: '#374151' },
 }
 
 export default function Sales({ user }) {
@@ -25,9 +31,11 @@ export default function Sales({ user }) {
   const [gForm, setGForm] = useState({ items: '', calls: '', quotes: '', premium: '' })
   const [sForm, setSForm] = useState({ uid: '', client: '', pt: 'Auto', premium: '' })
   const [aForm, setAForm] = useState({ uid: '', type: 'Call', count: '', notes: '' })
-  const [lForm, setLForm] = useState({ name: '', phone: '', source: 'Walk-in', notes: '' })
+  const [lForm, setLForm] = useState({ name: '', phone: '', source: 'BP', notes: '' })
   const [saving, setSaving] = useState(false)
-  const [expandedLead, setExpandedLead] = useState(null)
+  const [leadFilter, setLeadFilter] = useState('All')
+  const [leadSourceFilter, setLeadSourceFilter] = useState('All')
+  const [leadExpanded, setLeadExpanded] = useState(null)
 
   const isAdmin = user.role === 'admin'
   const members = profiles.filter(p => p.role === 'member')
@@ -92,13 +100,18 @@ export default function Sales({ user }) {
       .insert({ ...lForm, logged_by: user.id, status: 'New' })
       .select().single()
     if (data) setLeads(ls => [data, ...ls])
-    setLForm({ name: '', phone: '', source: 'Walk-in', notes: '' })
+    setLForm({ name: '', phone: '', source: 'BP', notes: '' })
     setSaving(false)
   }
 
   async function updateLeadStatus(id, status) {
     await supabase.from('lead_returns').update({ status }).eq('id', id)
     setLeads(ls => ls.map(l => l.id === id ? { ...l, status } : l))
+  }
+
+  async function updateLeadNotes(id, notes) {
+    await supabase.from('lead_returns').update({ notes }).eq('id', id)
+    setLeads(ls => ls.map(l => l.id === id ? { ...l, notes } : l))
   }
 
   async function deleteLead(id) {
@@ -128,6 +141,7 @@ export default function Sales({ user }) {
 
   if (loading) return <Spinner />
 
+  // ── Leaderboard — sorted by PREMIUM ──────────────────────────
   const lbData = members.map(m => {
     const ms = sales.filter(s => s.uid === m.id)
     const ma = acts.filter(a => a.uid === m.id)
@@ -137,7 +151,17 @@ export default function Sales({ user }) {
     const quotes = ma.filter(a => a.type === 'Quote').reduce((s, a) => s + a.count, 0)
     const g = goals[m.id] || { policies: 8, calls: 100, quotes: 30, premium: 10000 }
     return { m, items, prem, calls, quotes, g }
-  }).sort((a, b) => b.items - a.items)
+  }).sort((a, b) => b.prem - a.prem) // ← sorted by premium
+
+  // ── Lead returns filters ──────────────────────────────────────
+  const filteredLeads = leads
+    .filter(l => leadFilter === 'All' || l.status === leadFilter)
+    .filter(l => leadSourceFilter === 'All' || l.source === leadSourceFilter)
+
+  const leadCounts = {}
+  LEAD_STATUSES.forEach(s => { leadCounts[s] = leads.filter(l => l.status === s).length })
+  const leadSrcCounts = {}
+  LEAD_SOURCES.forEach(s => { leadSrcCounts[s] = leads.filter(l => l.source === s).length })
 
   const tabs = isAdmin
     ? ['Leaderboard', 'Log sale', 'Log activity', 'Lead Returns', 'Goals']
@@ -178,8 +202,8 @@ export default function Sales({ user }) {
                           </div>
                         </td>
                         <td style={{ padding: '11px 12px', minWidth: 90 }}><MiniBar val={items} max={g.policies} /></td>
-                        <td style={{ padding: '11px 12px', minWidth: 100 }}>
-                          <div style={{ fontSize: 12, fontWeight: 500, color: pcol(prem, g.premium), marginBottom: 1 }}>${prem.toLocaleString()}</div>
+                        <td style={{ padding: '11px 12px', minWidth: 110 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: pcol(prem, g.premium), marginBottom: 1 }}>${prem.toLocaleString()}</div>
                           <div style={{ fontSize: 10, color: '#9ca3af' }}>{pct(prem, g.premium)}% of ${g.premium.toLocaleString()}</div>
                         </td>
                         <td style={{ padding: '11px 12px', minWidth: 85 }}><MiniBar val={calls} max={g.calls} /></td>
@@ -289,80 +313,162 @@ export default function Sales({ user }) {
         {/* ── LEAD RETURNS ── */}
         {tab === 'Lead Returns' && (
           <div>
-            {/* Quick log form */}
-            <Card mb={14}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: '#111', marginBottom: 12 }}>Log a lead return</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <Field label="Name *">
-                  <input style={IS} value={lForm.name} onChange={e => setLForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. John Smith" />
-                </Field>
-                <Field label="Phone *">
-                  <input style={IS} value={lForm.phone} onChange={e => setLForm(f => ({ ...f, phone: e.target.value }))} placeholder="e.g. 708-555-0123" />
-                </Field>
-                <Field label="Lead source">
-                  <select style={IS} value={lForm.source} onChange={e => setLForm(f => ({ ...f, source: e.target.value }))}>
-                    {LEAD_SOURCES.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </Field>
-                <Field label="Notes">
-                  <input style={IS} value={lForm.notes} onChange={e => setLForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional context…" />
-                </Field>
-              </div>
-              <Btn onClick={addLead} disabled={saving}>{saving ? 'Saving…' : '+ Log lead return'}</Btn>
-            </Card>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 185px', gap: 12 }}>
+              <div>
+                {/* Log form */}
+                <Card mb={14}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: '#111', marginBottom: 12 }}>Log a lead return</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <Field label="Name *">
+                      <input style={IS} value={lForm.name} onChange={e => setLForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. John Smith" />
+                    </Field>
+                    <Field label="Phone *">
+                      <input style={IS} value={lForm.phone} onChange={e => setLForm(f => ({ ...f, phone: e.target.value }))} placeholder="e.g. 708-555-0123" />
+                    </Field>
+                    <Field label="Source">
+                      <select style={IS} value={lForm.source} onChange={e => setLForm(f => ({ ...f, source: e.target.value }))}>
+                        {LEAD_SOURCES.map(s => <option key={s}>{s}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Notes">
+                      <input style={IS} value={lForm.notes} onChange={e => setLForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional context…" />
+                    </Field>
+                  </div>
+                  <Btn onClick={addLead} disabled={saving}>{saving ? 'Saving…' : '+ Log lead return'}</Btn>
+                </Card>
 
-            {/* Lead list */}
-            <Card p={0}>
-              {leads.length === 0
-                ? <EmptyState text="No lead returns logged yet." />
-                : (
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ background: '#f9fafb' }}>
-                        {['Name', 'Phone', 'Source', 'Date', 'Status', ''].map(h => (
-                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.4 }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leads.flatMap(l => {
-                        const sc = LEAD_STATUS_COLORS[l.status] || LEAD_STATUS_COLORS['New']
-                        const isExp = expandedLead === l.id
-                        return [
-                          <tr key={l.id} onClick={() => setExpandedLead(isExp ? null : l.id)} style={{ borderTop: '1px solid #f3f4f6', cursor: 'pointer' }}>
-                            <td style={{ padding: '9px 12px', fontSize: 12, fontWeight: 500, color: '#111' }}>{l.name}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 12, color: '#6b7280' }}>{l.phone}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 11, color: '#6b7280' }}>{l.source}</td>
-                            <td style={{ padding: '9px 12px', fontSize: 11, color: '#9ca3af' }}>{new Date(l.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
-                            <td style={{ padding: '9px 12px' }}>
-                              <span style={{ background: sc.bg, color: sc.tx, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 500 }}>{l.status}</span>
-                            </td>
-                            <td style={{ padding: '9px 12px', fontSize: 10, color: '#9ca3af' }}>{isExp ? '▲' : '▼'}</td>
-                          </tr>,
-                          isExp && (
-                            <tr key={l.id + 'x'} style={{ background: '#f9fafb', borderTop: '1px solid #f3f4f6' }}>
-                              <td colSpan={6} style={{ padding: '10px 14px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                  <span style={{ fontSize: 11, color: '#6b7280', fontWeight: 500 }}>Update status:</span>
-                                  {LEAD_STATUSES.map(s => {
-                                    const c = LEAD_STATUS_COLORS[s]
-                                    return (
-                                      <button key={s} onClick={() => updateLeadStatus(l.id, s)} style={{ padding: '3px 9px', borderRadius: 99, cursor: 'pointer', fontSize: 11, fontWeight: 500, border: `1px solid ${l.status === s ? c.tx : '#e5e7eb'}`, background: l.status === s ? c.bg : '#fff', color: l.status === s ? c.tx : '#6b7280' }}>{s}</button>
-                                    )
-                                  })}
-                                  {l.notes && <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 8 }}>📝 {l.notes}</span>}
-                                  <button onClick={() => deleteLead(l.id)} style={{ marginLeft: 'auto', border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 12 }}>🗑 Delete</button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        ].filter(Boolean)
-                      })}
-                    </tbody>
-                  </table>
-                )
-              }
-            </Card>
+                {/* Status filters */}
+                <div style={{ display: 'flex', gap: 5, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: '#9ca3af' }}>Status:</span>
+                  {['All', ...LEAD_STATUSES].map(s => (
+                    <button key={s} onClick={() => setLeadFilter(s)} style={{
+                      padding: '3px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                      background: leadFilter === s ? N : '#f3f4f6',
+                      color: leadFilter === s ? '#fff' : '#6b7280',
+                    }}>{s}</button>
+                  ))}
+                </div>
+
+                {/* Source filters */}
+                <div style={{ display: 'flex', gap: 5, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: '#9ca3af' }}>Source:</span>
+                  {['All', ...LEAD_SOURCES].map(s => (
+                    <button key={s} onClick={() => setLeadSourceFilter(s)} style={{
+                      padding: '3px 10px', borderRadius: 99, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                      background: leadSourceFilter === s ? '#374151' : '#f3f4f6',
+                      color: leadSourceFilter === s ? '#fff' : '#6b7280',
+                    }}>{s}</button>
+                  ))}
+                </div>
+
+                {/* Leads table */}
+                <Card p={0}>
+                  {filteredLeads.length === 0
+                    ? <EmptyState text={leads.length === 0 ? 'No lead returns logged yet.' : 'No records match this filter.'} />
+                    : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#f9fafb' }}>
+                            {['Name', 'Phone', 'Source', 'Date', 'Status', ''].map(h => (
+                              <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, fontWeight: 500, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.4 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredLeads.flatMap(l => {
+                            const sc = LEAD_STATUS_COLORS[l.status] || LEAD_STATUS_COLORS['New']
+                            const src = LEAD_SOURCE_COLORS[l.source] || LEAD_SOURCE_COLORS['Other']
+                            const isExp = leadExpanded === l.id
+                            return [
+                              <tr key={l.id} onClick={() => setLeadExpanded(isExp ? null : l.id)} style={{ borderTop: '1px solid #f3f4f6', cursor: 'pointer' }}>
+                                <td style={{ padding: '9px 12px', fontSize: 12, fontWeight: 500, color: '#111' }}>{l.name}</td>
+                                <td style={{ padding: '9px 12px', fontSize: 12, color: '#6b7280' }}>{l.phone}</td>
+                                <td style={{ padding: '9px 12px' }}>
+                                  <span style={{ background: src.bg, color: src.tx, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 500 }}>{l.source}</span>
+                                </td>
+                                <td style={{ padding: '9px 12px', fontSize: 11, color: '#9ca3af' }}>
+                                  {new Date(l.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                </td>
+                                <td style={{ padding: '9px 12px' }}>
+                                  <span style={{ background: sc.bg, color: sc.tx, padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 500 }}>{l.status}</span>
+                                </td>
+                                <td style={{ padding: '9px 12px', fontSize: 10, color: '#9ca3af' }}>{isExp ? '▲' : '▼'}</td>
+                              </tr>,
+                              isExp && (
+                                <tr key={l.id + 'x'} style={{ background: '#f9fafb', borderTop: '1px solid #f3f4f6' }}>
+                                  <td colSpan={6} style={{ padding: '10px 14px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20, flexWrap: 'wrap' }}>
+                                      <div>
+                                        <div style={{ fontSize: 10, fontWeight: 500, color: '#9ca3af', marginBottom: 5, textTransform: 'uppercase' }}>Update status</div>
+                                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                                          {LEAD_STATUSES.map(s => {
+                                            const c = LEAD_STATUS_COLORS[s]
+                                            return (
+                                              <button key={s} onClick={e => { e.stopPropagation(); updateLeadStatus(l.id, s) }} style={{
+                                                padding: '3px 9px', borderRadius: 99, cursor: 'pointer', fontSize: 11, fontWeight: 500,
+                                                border: `1px solid ${l.status === s ? c.tx : '#e5e7eb'}`,
+                                                background: l.status === s ? c.bg : '#fff',
+                                                color: l.status === s ? c.tx : '#6b7280',
+                                              }}>{s}</button>
+                                            )
+                                          })}
+                                        </div>
+                                      </div>
+                                      <div style={{ flex: 1, minWidth: 180 }}>
+                                        <div style={{ fontSize: 10, fontWeight: 500, color: '#9ca3af', marginBottom: 5, textTransform: 'uppercase' }}>Notes</div>
+                                        <input
+                                          defaultValue={l.notes || ''}
+                                          onBlur={e => updateLeadNotes(l.id, e.target.value)}
+                                          placeholder="Add notes…"
+                                          style={{ ...IS, fontSize: 12 }}
+                                          onClick={e => e.stopPropagation()}
+                                        />
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                                        <button onClick={e => { e.stopPropagation(); deleteLead(l.id) }} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', fontSize: 12, padding: '4px 0' }}>🗑 Delete</button>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            ].filter(Boolean)
+                          })}
+                        </tbody>
+                      </table>
+                    )
+                  }
+                </Card>
+              </div>
+
+              {/* Stats sidebar */}
+              <div>
+                <Card mb={10}>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: '#111', marginBottom: 10 }}>By status</div>
+                  {[
+                    { label: 'Total', val: leads.length },
+                    ...LEAD_STATUSES.map(s => ({ label: s, val: leadCounts[s] || 0, c: LEAD_STATUS_COLORS[s]?.tx }))
+                  ].map((s, i, a) => (
+                    <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < a.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                      <span style={{ fontSize: 11, color: '#6b7280' }}>{s.label}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: s.c || '#111' }}>{s.val}</span>
+                    </div>
+                  ))}
+                </Card>
+
+                <Card>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: '#111', marginBottom: 10 }}>By source</div>
+                  {LEAD_SOURCES.map((s, i) => {
+                    const src = LEAD_SOURCE_COLORS[s]
+                    return (
+                      <div key={s} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: i < LEAD_SOURCES.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
+                        <span style={{ fontSize: 11, color: '#6b7280' }}>{s}</span>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: src.tx }}>{leadSrcCounts[s] || 0}</span>
+                      </div>
+                    )
+                  })}
+                </Card>
+              </div>
+            </div>
           </div>
         )}
 
