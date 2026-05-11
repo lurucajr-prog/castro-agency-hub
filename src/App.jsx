@@ -8,6 +8,7 @@ import Referrals from './components/Referrals'
 import Reviews from './components/Reviews'
 import Sales from './components/Sales'
 import LeadReturns from './components/LeadReturns'
+import LiveLeads from './components/LiveLeads'
 import Cancellations from './components/Cancellations'
 import Renewals from './components/Renewals'
 import Learning from './components/Learning'
@@ -66,6 +67,7 @@ export default function App() {
     reviews:       Reviews,
     sales:         Sales,
     'lead-returns': LeadReturns,
+    'live-leads':  LiveLeads,
     cancellations: Cancellations,
     renewals:      Renewals,
     learning:      Learning,
