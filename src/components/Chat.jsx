@@ -2,20 +2,25 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { N, R, Spinner } from './shared'
 
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '🎉', '👏']
+
 export default function Chat({ user }) {
   const [messages, setMessages] = useState([])
   const [profiles, setProfiles] = useState([])
+  const [reactions, setReactions] = useState({}) // messageId -> { emoji -> [uid, ...] }
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [lightbox, setLightbox] = useState(null)
   const [hoveredMsg, setHoveredMsg] = useState(null)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(null) // message id
   const endRef = useRef(null)
   const fileRef = useRef(null)
 
   useEffect(() => {
     fetchMessages()
-    const channel = supabase
+
+    const msgChannel = supabase
       .channel('public:messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         setMessages(prev => [...prev, payload.new])
@@ -24,7 +29,32 @@ export default function Chat({ user }) {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id))
       })
       .subscribe()
-    return () => supabase.removeChannel(channel)
+
+    const rxChannel = supabase
+      .channel('public:message_reactions')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' }, payload => {
+        const r = payload.new
+        setReactions(prev => {
+          const msgR = { ...(prev[r.message_id] || {}) }
+          msgR[r.emoji] = [...(msgR[r.emoji] || []), r.uid]
+          return { ...prev, [r.message_id]: msgR }
+        })
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' }, payload => {
+        const r = payload.old
+        setReactions(prev => {
+          const msgR = { ...(prev[r.message_id] || {}) }
+          msgR[r.emoji] = (msgR[r.emoji] || []).filter(uid => uid !== r.uid)
+          if (msgR[r.emoji]?.length === 0) delete msgR[r.emoji]
+          return { ...prev, [r.message_id]: msgR }
+        })
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(msgChannel)
+      supabase.removeChannel(rxChannel)
+    }
   }, [])
 
   useEffect(() => {
@@ -32,13 +62,41 @@ export default function Chat({ user }) {
   }, [messages])
 
   async function fetchMessages() {
-    const [m, p] = await Promise.all([
+    const [m, p, r] = await Promise.all([
       supabase.from('messages').select('*').order('created_at', { ascending: true }).limit(200),
       supabase.from('profiles').select('*'),
+      supabase.from('message_reactions').select('*'),
     ])
     setMessages(m.data || [])
     setProfiles(p.data || [])
+
+    // Group reactions by message_id -> emoji -> [uids]
+    const grouped = {}
+    ;(r.data || []).forEach(rx => {
+      if (!grouped[rx.message_id]) grouped[rx.message_id] = {}
+      if (!grouped[rx.message_id][rx.emoji]) grouped[rx.message_id][rx.emoji] = []
+      grouped[rx.message_id][rx.emoji].push(rx.uid)
+    })
+    setReactions(grouped)
     setLoading(false)
+  }
+
+  async function toggleReaction(messageId, emoji) {
+    setShowEmojiPicker(null)
+    const msgR = reactions[messageId] || {}
+    const users = msgR[emoji] || []
+    const alreadyReacted = users.includes(user.id)
+
+    if (alreadyReacted) {
+      await supabase.from('message_reactions')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('uid', user.id)
+        .eq('emoji', emoji)
+    } else {
+      await supabase.from('message_reactions')
+        .insert({ message_id: messageId, uid: user.id, emoji })
+    }
   }
 
   async function uploadAndSend(file) {
@@ -63,6 +121,7 @@ export default function Chat({ user }) {
   }
 
   async function deleteMessage(id) {
+    if (!window.confirm('Delete this message?')) return
     await supabase.from('messages').delete().eq('id', id)
     setMessages(prev => prev.filter(m => m.id !== id))
   }
@@ -79,10 +138,7 @@ export default function Chat({ user }) {
     if (!imageItem) return
     e.preventDefault()
     const file = imageItem.getAsFile()
-    if (file) {
-      const namedFile = new File([file], `paste-${Date.now()}.png`, { type: file.type })
-      await uploadAndSend(namedFile)
-    }
+    if (file) await uploadAndSend(new File([file], `paste-${Date.now()}.png`, { type: file.type }))
   }
 
   function onKey(e) {
@@ -121,12 +177,16 @@ export default function Chat({ user }) {
   return (
     <>
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        {/* Header */}
         <div style={{ padding: '13px 18px', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 600, color: '#111' }}>Team chat</div>
           <div style={{ fontSize: 11, color: '#6b7280' }}>{profiles.length} members · Castro Agency</div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Messages */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}
+          onClick={() => setShowEmojiPicker(null)}
+        >
           {grouped.length === 0 && (
             <div style={{ textAlign: 'center', color: '#9ca3af', fontSize: 13, marginTop: 40 }}>No messages yet. Say hello to the team! 👋</div>
           )}
@@ -140,16 +200,19 @@ export default function Chat({ user }) {
                 </div>
               )
             }
+
             const isMe = item.uid === user.id
             const p = getProfile(item.uid)
             const canDelete = isMe || isAdmin
             const isHovered = hoveredMsg === item.id
+            const msgReactions = reactions[item.id] || {}
+            const hasReactions = Object.keys(msgReactions).length > 0
 
             return (
               <div
                 key={item.id}
                 onMouseEnter={() => setHoveredMsg(item.id)}
-                onMouseLeave={() => setHoveredMsg(null)}
+                onMouseLeave={() => { setHoveredMsg(null) }}
                 style={{ display: 'flex', gap: 9, flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-start', position: 'relative' }}
               >
                 <div style={{
@@ -160,38 +223,88 @@ export default function Chat({ user }) {
                 }}>{p.ini}</div>
 
                 <div style={{ maxWidth: '68%' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexDirection: isMe ? 'row-reverse' : 'row', marginBottom: 3 }}>
+                  {/* Name + time + delete */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: isMe ? 'row-reverse' : 'row', marginBottom: 3 }}>
                     <span style={{ fontSize: 11, fontWeight: 600, color: '#374151' }}>{isMe ? 'You' : p.name}</span>
                     <span style={{ fontSize: 10, color: '#9ca3af' }}>{formatTime(item.created_at)}</span>
-                    {/* Delete button — shows on hover for own messages or admin */}
                     {canDelete && isHovered && (
-                      <button
-                        onClick={() => { if (window.confirm('Delete this message?')) deleteMessage(item.id) }}
-                        title="Delete message"
-                        style={{
-                          border: 'none', background: 'none', cursor: 'pointer',
-                          fontSize: 12, color: '#ef4444', padding: '0 2px', lineHeight: 1,
-                          opacity: 0.7,
-                        }}
-                      >🗑</button>
+                      <button onClick={() => deleteMessage(item.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, color: '#ef4444', opacity: 0.7, padding: 0 }}>🗑</button>
                     )}
                   </div>
+
+                  {/* Image */}
                   {item.image_url && (
                     <div style={{ marginBottom: item.text ? 6 : 0 }}>
-                      <img
-                        src={item.image_url}
-                        alt="shared"
-                        onClick={() => setLightbox(item.image_url)}
-                        style={{ maxWidth: 260, maxHeight: 200, borderRadius: 10, cursor: 'zoom-in', display: 'block', border: '1px solid #e5e7eb', objectFit: 'cover' }}
-                      />
+                      <img src={item.image_url} alt="shared" onClick={() => setLightbox(item.image_url)} style={{ maxWidth: 260, maxHeight: 200, borderRadius: 10, cursor: 'zoom-in', display: 'block', border: '1px solid #e5e7eb', objectFit: 'cover' }} />
                     </div>
                   )}
+
+                  {/* Text bubble */}
                   {item.text && (
                     <div style={{
                       background: isMe ? N : '#f3f4f6', color: isMe ? '#fff' : '#111',
                       padding: '9px 13px', borderRadius: isMe ? '12px 2px 12px 12px' : '2px 12px 12px 12px',
                       fontSize: 13, lineHeight: 1.55,
                     }}>{item.text}</div>
+                  )}
+
+                  {/* Reactions display */}
+                  {hasReactions && (
+                    <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap', flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                      {Object.entries(msgReactions).map(([emoji, uids]) => {
+                        const iMine = uids.includes(user.id)
+                        const reacters = uids.map(uid => profiles.find(p => p.id === uid)?.name || 'Someone').join(', ')
+                        return (
+                          <button
+                            key={emoji}
+                            onClick={e => { e.stopPropagation(); toggleReaction(item.id, emoji) }}
+                            title={reacters}
+                            style={{
+                              padding: '2px 8px', borderRadius: 99, border: `1px solid ${iMine ? N : '#e5e7eb'}`,
+                              background: iMine ? '#eff6ff' : '#fff', cursor: 'pointer',
+                              fontSize: 13, display: 'flex', alignItems: 'center', gap: 3,
+                            }}
+                          >
+                            {emoji}
+                            <span style={{ fontSize: 11, fontWeight: 600, color: iMine ? N : '#6b7280' }}>{uids.length}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Emoji picker trigger — shows on hover */}
+                  {isHovered && (
+                    <div style={{ position: 'relative', marginTop: 4, display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start' }}>
+                      <button
+                        onClick={e => { e.stopPropagation(); setShowEmojiPicker(showEmojiPicker === item.id ? null : item.id) }}
+                        style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 99, padding: '2px 8px', cursor: 'pointer', fontSize: 12, color: '#6b7280' }}
+                        title="Add reaction"
+                      >😊 +</button>
+
+                      {/* Emoji picker popup */}
+                      {showEmojiPicker === item.id && (
+                        <div
+                          onClick={e => e.stopPropagation()}
+                          style={{
+                            position: 'absolute', bottom: '110%', [isMe ? 'right' : 'left']: 0,
+                            background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12,
+                            padding: '8px 10px', display: 'flex', gap: 6,
+                            boxShadow: '0 4px 20px rgba(0,0,0,0.12)', zIndex: 100,
+                          }}
+                        >
+                          {REACTION_EMOJIS.map(emoji => (
+                            <button
+                              key={emoji}
+                              onClick={() => toggleReaction(item.id, emoji)}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, padding: '2px 4px', borderRadius: 6, transition: 'transform 0.1s' }}
+                              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.3)'; e.currentTarget.style.background = '#f3f4f6' }}
+                              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.background = 'none' }}
+                            >{emoji}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -200,40 +313,22 @@ export default function Chat({ user }) {
           <div ref={endRef} />
         </div>
 
+        {/* Input */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
-          {uploading && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6, paddingLeft: 4 }}>⏳ Uploading image…</div>}
+          {uploading && <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 6 }}>⏳ Uploading image…</div>}
           <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              title="Send an image"
-              style={{
-                width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                border: '1px solid #e5e7eb', background: '#fff',
-                cursor: uploading ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 17, color: uploading ? '#d1d5db' : '#6b7280',
-              }}
-            >📎</button>
+            <button onClick={() => fileRef.current?.click()} disabled={uploading} title="Send an image" style={{ width: 38, height: 38, borderRadius: '50%', border: '1px solid #e5e7eb', background: '#fff', cursor: uploading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, color: uploading ? '#d1d5db' : '#6b7280' }}>📎</button>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageUpload} />
             <input
               value={text}
               onChange={e => setText(e.target.value)}
               onKeyDown={onKey}
               onPaste={handlePaste}
-              placeholder={uploading ? 'Uploading…' : 'Message the team… (or paste an image with Ctrl+V / ⌘+V)'}
+              placeholder={uploading ? 'Uploading…' : 'Message the team… (or paste image with Ctrl+V / ⌘+V)'}
               disabled={uploading}
               style={{ flex: 1, fontSize: 13, padding: '9px 15px', border: '1px solid #e5e7eb', borderRadius: 22, background: '#f9fafb', color: '#111', outline: 'none' }}
             />
-            <button
-              onClick={sendMessage}
-              disabled={uploading}
-              style={{
-                background: uploading ? '#9ca3af' : N, color: '#fff', border: 'none',
-                borderRadius: 22, padding: '9px 20px', fontSize: 13,
-                fontWeight: 500, cursor: uploading ? 'not-allowed' : 'pointer', flexShrink: 0,
-              }}
-            >Send</button>
+            <button onClick={sendMessage} disabled={uploading} style={{ background: uploading ? '#9ca3af' : N, color: '#fff', border: 'none', borderRadius: 22, padding: '9px 20px', fontSize: 13, fontWeight: 500, cursor: uploading ? 'not-allowed' : 'pointer', flexShrink: 0 }}>Send</button>
           </div>
         </div>
       </div>
