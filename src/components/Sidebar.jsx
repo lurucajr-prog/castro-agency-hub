@@ -10,11 +10,11 @@ const NAV_ALL = [
   { id: 'referrals',     label: 'Referrals',       icon: '↗' },
   { id: 'reviews',       label: 'Reviews',         icon: '★' },
   { id: 'sales',         label: 'Sales',           icon: '$' },
+  { id: 'chat',          label: 'Team Chat',       icon: '◎' },
   { id: 'live-leads',    label: 'Live Lead Recap', icon: '⚡', restricted: true },
   { id: 'cancellations', label: 'Cancellations',   icon: '⚠' },
   { id: 'renewals',      label: 'Renewals',        icon: '↻' },
   { id: 'learning',      label: 'Learning',        icon: '📚' },
-  { id: 'chat',          label: 'Team chat',       icon: '◎' },
   { id: 'dms',           label: 'Messages',        icon: '💬' },
 ]
 
@@ -88,12 +88,7 @@ export default function Sidebar({ user, page, setPage, onLogout }) {
 
       <div style={{ padding: '9px 7px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: '50%',
-            background: user.role === 'admin' ? R : 'rgba(255,255,255,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 9, fontWeight: 600, color: '#fff', flexShrink: 0,
-          }}>{user.ini}</div>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', background: user.role === 'admin' ? R : 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: '#fff', flexShrink: 0 }}>{user.ini}</div>
           <div>
             <div style={{ color: '#fff', fontSize: 11, fontWeight: 500 }}>{user.name}</div>
             <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10 }}>{user.title}</div>
