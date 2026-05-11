@@ -1,6 +1,38 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { N, R, Card, SectionHeader, Chip, Avatar, Spinner, pct, pcol } from './shared'
+import { N, R, Card, SectionHeader, Spinner } from './shared'
+
+const QUOTES = [
+  { text: "The secret of getting ahead is getting started.", author: "Mark Twain" },
+  { text: "Don't watch the clock. Do what it does — keep going.", author: "Sam Levenson" },
+  { text: "Success usually comes to those who are too busy to be looking for it.", author: "Henry David Thoreau" },
+  { text: "Opportunities don't happen. You create them.", author: "Chris Grosser" },
+  { text: "It always seems impossible until it's done.", author: "Nelson Mandela" },
+  { text: "Hard work beats talent when talent doesn't work hard.", author: "Tim Notke" },
+  { text: "The harder the battle, the sweeter the victory.", author: "Les Brown" },
+  { text: "Every no gets you closer to a yes. Keep dialing.", author: "Castro Agency" },
+  { text: "You miss 100% of the shots you don't take.", author: "Wayne Gretzky" },
+  { text: "Act as if what you do makes a difference. It does.", author: "William James" },
+  { text: "Your attitude determines your direction.", author: "Unknown" },
+  { text: "Sales are contingent upon the attitude of the salesman, not the attitude of the prospect.", author: "W. Clement Stone" },
+  { text: "Motivation is what gets you started. Habit is what keeps you going.", author: "Jim Ryun" },
+  { text: "The best time to plant a tree was 20 years ago. The second best time is now.", author: "Chinese Proverb" },
+  { text: "Dream big. Start small. Act now.", author: "Robin Sharma" },
+  { text: "A goal is a dream with a deadline.", author: "Napoleon Hill" },
+  { text: "The difference between ordinary and extraordinary is that little extra.", author: "Jimmy Johnson" },
+  { text: "Success is walking from failure to failure with no loss of enthusiasm.", author: "Winston Churchill" },
+  { text: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" },
+  { text: "Don't count the days. Make the days count.", author: "Muhammad Ali" },
+  { text: "Go the extra mile. It's never crowded there.", author: "Wayne Dyer" },
+]
+
+const todayQuote = QUOTES[new Date().getDate() % QUOTES.length]
+
+const PODIUM_COLORS = [
+  { bg: '#EAF3DE', tx: '#27500A', border: '#C0DD97' },
+  { bg: '#E6F1FB', tx: '#0C447C', border: '#B5D4F4' },
+  { bg: '#FAEEDA', tx: '#633806', border: '#FAC775' },
+]
 
 export default function Dashboard({ user, setPage }) {
   const [data, setData] = useState(null)
@@ -9,12 +41,13 @@ export default function Dashboard({ user, setPage }) {
   useEffect(() => { fetchAll() }, [])
 
   async function fetchAll() {
-    const [tasks, sales, revs, refs, profiles] = await Promise.all([
+    const [tasks, sales, revs, refs, profiles, goals] = await Promise.all([
       supabase.from('tasks').select('*'),
       supabase.from('sales').select('*'),
       supabase.from('reviews').select('*'),
       supabase.from('referrals').select('*'),
       supabase.from('profiles').select('*'),
+      supabase.from('goals').select('*'),
     ])
     setData({
       tasks: tasks.data || [],
@@ -22,137 +55,213 @@ export default function Dashboard({ user, setPage }) {
       revs: revs.data || [],
       refs: refs.data || [],
       profiles: profiles.data || [],
+      goals: goals.data || [],
     })
     setLoading(false)
   }
 
   if (loading) return <Spinner />
 
-  const { tasks, sales, revs, refs, profiles } = data
+  const { tasks, sales, revs, refs, profiles, goals } = data
   const isAdmin = user.role === 'admin'
   const members = profiles.filter(p => p.role === 'member')
 
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const monthSales = sales.filter(s => s.created_at >= monthStart)
+  const totalPrem = monthSales.reduce((s, x) => s + (x.premium || 0), 0)
   const myTasks = tasks.filter(t => t.uid === user.id)
-  const mySales = sales.filter(s => s.uid === user.id)
-
-  const totalPrem = sales.reduce((s, x) => s + (x.premium || 0), 0)
+  const myTasksDone = myTasks.filter(t => t.done).length
   const revDone = revs.filter(r => r.result === 'Left a Review').length
 
-  // Top referrers
-  const rc = {}
-  refs.forEach(r => { rc[r.referred_by] = (rc[r.referred_by] || 0) + 1 })
-  const topRefs = Object.entries(rc).sort((a, b) => b[1] - a[1]).slice(0, 3)
+  // Total premium goal
+  const goalsMap = {}
+  goals.forEach(g => { goalsMap[g.uid] = g })
+  const totalPremGoal = members.reduce((sum, m) => sum + (goalsMap[m.id]?.premium || 10000), 0)
+  const premPct = totalPremGoal ? Math.min(100, Math.round(totalPrem / totalPremGoal * 100)) : 0
 
-  // Sales leaderboard (agents only)
-  const saleRank = members
-    .map(m => ({ m, n: sales.filter(s => s.uid === m.id).length }))
-    .sort((a, b) => b.n - a.n)
+  const myMonthSales = monthSales.filter(s => s.uid === user.id)
+  const myPrem = myMonthSales.reduce((s, x) => s + (x.premium || 0), 0)
 
-  const medals = ['🥇', '🥈', '🥉', '4.', '5.', '6.', '7.']
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const daysLeft = daysInMonth - now.getDate()
 
   const stats = [
-    { label: isAdmin ? 'Total tasks' : 'My tasks', val: isAdmin ? tasks.length : myTasks.length, sub: (isAdmin ? tasks.filter(t => t.done).length : myTasks.filter(t => t.done).length) + ' completed', c: '#1e40af' },
-    { label: 'Policies sold', val: isAdmin ? sales.length : mySales.length, sub: 'this month', c: '#166534' },
-    { label: 'Total premium', val: '$' + totalPrem.toLocaleString(), sub: 'this month', c: '#92400e' },
-    { label: 'Review requests', val: revs.length, sub: revDone + ' left a review', c: '#991b1b' },
+    {
+      label: 'Premium this month',
+      val: '$' + totalPrem.toLocaleString(),
+      sub: premPct + '% of goal',
+      pct: premPct,
+      bg: '#EAF3DE', tx: '#27500A', bar: '#639922',
+    },
+    {
+      label: isAdmin ? 'Items sold' : 'My items sold',
+      val: isAdmin ? monthSales.length : myMonthSales.length,
+      sub: isAdmin ? members.length + ' agents' : '$' + myPrem.toLocaleString() + ' premium',
+      pct: null,
+      bg: '#E6F1FB', tx: '#0C447C', bar: '#378ADD',
+    },
+    {
+      label: isAdmin ? 'Total tasks' : 'My tasks',
+      val: isAdmin ? tasks.length : myTasks.length,
+      sub: isAdmin
+        ? tasks.filter(t => t.done).length + ' completed'
+        : myTasksDone + '/' + myTasks.length + ' done',
+      pct: null,
+      bg: '#EEEDFE', tx: '#3C3489', bar: '#7F77DD',
+    },
+    {
+      label: 'Review requests',
+      val: revs.length,
+      sub: revDone + ' left a review',
+      pct: revs.length ? Math.round(revDone / revs.length * 100) : 0,
+      bg: '#FAEEDA', tx: '#633806', bar: '#BA7517',
+    },
   ]
 
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  // Leaderboard sorted by premium
+  const lbData = members
+    .map(m => ({
+      m,
+      prem: monthSales.filter(s => s.uid === m.id).reduce((s, x) => s + (x.premium || 0), 0),
+      items: monthSales.filter(s => s.uid === m.id).length,
+    }))
+    .sort((a, b) => b.prem - a.prem)
+
+  const medals = ['🥇', '🥈', '🥉']
+  const today = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 22 }}>
       {/* Header */}
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 18, fontWeight: 600, color: '#111', marginBottom: 2 }}>
-          Good morning, {user.name} 👋
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 500, color: '#111', marginBottom: 2 }}>
+            Good morning, {user.name} 👋
+          </div>
+          <div style={{ fontSize: 12, color: '#6b7280' }}>{today} · Castro Agency</div>
         </div>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>{today} · Here's your overview</div>
+        <div style={{ background: '#dbeafe', color: '#1e40af', fontSize: 11, fontWeight: 500, padding: '5px 12px', borderRadius: 8 }}>
+          {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · {daysLeft} days left
+        </div>
       </div>
 
       {/* Stat cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 14 }}>
         {stats.map(s => (
-          <div key={s.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px' }}>
-            <div style={{ fontSize: 10, color: '#6b7280', fontWeight: 500, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{s.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 600, color: s.c, lineHeight: 1, marginBottom: 2 }}>{s.val}</div>
-            <div style={{ fontSize: 11, color: '#9ca3af' }}>{s.sub}</div>
+          <div key={s.label} style={{ background: s.bg, borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 10, color: s.tx, fontWeight: 500, opacity: 0.7, marginBottom: 3 }}>{s.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 500, color: s.tx, lineHeight: 1, marginBottom: 2 }}>{s.val}</div>
+            <div style={{ fontSize: 10, color: s.tx, opacity: 0.65, marginBottom: s.pct !== null ? 5 : 0 }}>{s.sub}</div>
+            {s.pct !== null && (
+              <div style={{ height: 3, background: 'rgba(0,0,0,0.1)', borderRadius: 99 }}>
+                <div style={{ width: s.pct + '%', height: '100%', background: s.bar, borderRadius: 99 }} />
+              </div>
+            )}
           </div>
         ))}
       </div>
 
       {/* Lower grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        {/* Team progress or my tasks */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 12 }}>
+
+        {/* Sales leaderboard — podium style */}
         <Card>
-          <SectionHeader title={isAdmin ? 'Team progress' : 'My tasks'} action="View all" onAction={() => setPage('tasks')} />
-          {isAdmin
-            ? members.map(m => {
-                const mt = tasks.filter(t => t.uid === m.id)
-                const done = mt.filter(t => t.done).length
-                const p = mt.length ? Math.round(done / mt.length * 100) : 0
-                const bc = p === 100 ? '#16a34a' : p > 50 ? '#d97706' : '#dc2626'
-                return (
-                  <div key={m.id} style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                        <Avatar ini={m.ini} isAdmin={false} size={20} />
-                        <span style={{ fontSize: 12, fontWeight: 500, color: '#111' }}>{m.name}</span>
-                      </div>
-                      <span style={{ fontSize: 11, color: bc, fontWeight: 500 }}>{done}/{mt.length}</span>
-                    </div>
-                    <div style={{ height: 3, background: '#f3f4f6', borderRadius: 99 }}>
-                      <div style={{ width: p + '%', height: '100%', background: bc, borderRadius: 99 }} />
-                    </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: '#111' }}>Sales leaderboard</span>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: '#6b7280' }}>by premium</span>
+              <button onClick={() => setPage('sales')} style={{ fontSize: 11, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>View all →</button>
+            </div>
+          </div>
+
+          {/* Podium top 3 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+            {lbData.slice(0, 3).map((item, i) => {
+              const c = PODIUM_COLORS[i]
+              return (
+                <div key={item.m.id} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 9, padding: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 18, marginBottom: 4 }}>{medals[i]}</div>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(0,0,0,0.08)', margin: '0 auto 5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: c.tx }}>
+                    {item.m.ini}
                   </div>
-                )
-              })
-            : myTasks.slice(0, 5).map(t => (
-                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '1px solid #f3f4f6' }}>
-                  <div style={{
-                    width: 13, height: 13, borderRadius: 3,
-                    border: `1.5px solid ${t.done ? '#16a34a' : '#d1d5db'}`,
-                    background: t.done ? '#16a34a' : 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 8, color: '#fff', fontWeight: 700, flexShrink: 0,
-                  }}>{t.done ? '✓' : ''}</div>
-                  <span style={{ fontSize: 12, flex: 1, color: '#111', textDecoration: t.done ? 'line-through' : 'none', opacity: t.done ? 0.5 : 1 }}>{t.title}</span>
-                  <Chip label={t.pri} />
+                  <div style={{ fontSize: 11, fontWeight: 500, color: c.tx }}>{item.m.name}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: c.tx, marginTop: 2 }}>
+                    ${item.prem.toLocaleString()}
+                  </div>
+                  <div style={{ fontSize: 10, color: c.tx, opacity: 0.7, marginTop: 1 }}>
+                    {item.items} item{item.items !== 1 ? 's' : ''}
+                  </div>
                 </div>
-              ))
-          }
-          {isAdmin && members.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: 12 }}>No agents yet.</div>}
+              )
+            })}
+          </div>
+
+          {/* 4th and 5th */}
+          {lbData.slice(3).map((item, i) => (
+            <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 0', borderTop: '0.5px solid #f3f4f6' }}>
+              <span style={{ fontSize: 12, color: '#9ca3af', width: 20 }}>{i + 4}.</span>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 600, color: '#1e40af', flexShrink: 0 }}>
+                {item.m.ini}
+              </div>
+              <span style={{ fontSize: 12, flex: 1, color: '#111' }}>{item.m.name}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: item.prem > 0 ? '#0C447C' : '#9ca3af' }}>
+                ${item.prem.toLocaleString()}
+              </span>
+            </div>
+          ))}
         </Card>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Leaderboard */}
-          <Card>
-            <SectionHeader title="Sales leaderboard" action="View all" onAction={() => setPage('sales')} />
-            {saleRank.map(({ m, n }, i) => (
-              <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: i < saleRank.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12, minWidth: 20 }}>{medals[i]}</span>
-                  <span style={{ fontSize: 12, color: '#111' }}>{m.name}</span>
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 500, color: N }}>{n} sold</span>
-              </div>
-            ))}
-            {saleRank.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: 8 }}>No sales yet.</div>}
+        {/* Right column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+
+          {/* Team progress or my tasks */}
+          <Card style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: '#111' }}>{isAdmin ? 'Team progress' : 'My tasks'}</span>
+              <button onClick={() => setPage('tasks')} style={{ fontSize: 11, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer' }}>View all →</button>
+            </div>
+            {isAdmin
+              ? members.map(m => {
+                  const mt = tasks.filter(t => t.uid === m.id)
+                  const done = mt.filter(t => t.done).length
+                  const p = mt.length ? Math.round(done / mt.length * 100) : 0
+                  const bc = p === 100 ? '#16a34a' : p > 50 ? '#d97706' : '#dc2626'
+                  return (
+                    <div key={m.id} style={{ marginBottom: 9 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <div style={{ width: 20, height: 20, borderRadius: '50%', background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 7, fontWeight: 600, color: '#1e40af' }}>{m.ini}</div>
+                          <span style={{ fontSize: 11, fontWeight: 500, color: '#111' }}>{m.name}</span>
+                        </div>
+                        <span style={{ fontSize: 10, color: bc, fontWeight: 500 }}>{done}/{mt.length}</span>
+                      </div>
+                      <div style={{ height: 3, background: '#f3f4f6', borderRadius: 99 }}>
+                        <div style={{ width: p + '%', height: '100%', background: bc, borderRadius: 99 }} />
+                      </div>
+                    </div>
+                  )
+                })
+              : myTasks.slice(0, 5).map(t => (
+                  <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '0.5px solid #f3f4f6' }}>
+                    <div style={{ width: 13, height: 13, borderRadius: 3, border: `1.5px solid ${t.done ? '#16a34a' : '#d1d5db'}`, background: t.done ? '#16a34a' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, color: '#fff', fontWeight: 700, flexShrink: 0 }}>
+                      {t.done ? '✓' : ''}
+                    </div>
+                    <span style={{ fontSize: 12, flex: 1, color: '#111', textDecoration: t.done ? 'line-through' : 'none', opacity: t.done ? 0.5 : 1 }}>{t.title}</span>
+                  </div>
+                ))
+            }
           </Card>
 
-          {/* Top referrers */}
-          <Card>
-            <SectionHeader title="Top referrers" action="View all" onAction={() => setPage('referrals')} />
-            {topRefs.map(([name, count], i) => (
-              <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: i < topRefs.length - 1 ? '1px solid #f3f4f6' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontSize: 12 }}>{['🥇','🥈','🥉'][i]}</span>
-                  <span style={{ fontSize: 12, color: '#111' }}>{name.split(',')[0]}</span>
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 500, color: N }}>{count} ref{count !== 1 ? 's' : ''}</span>
-              </div>
-            ))}
-            {topRefs.length === 0 && <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center', padding: 8 }}>No referrals yet.</div>}
-          </Card>
+          {/* Quote of the day */}
+          <div style={{ background: N, borderRadius: 10, padding: '14px 16px' }}>
+            <div style={{ fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Quote of the day</div>
+            <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.65, marginBottom: 8, fontStyle: 'italic' }}>
+              "{todayQuote.text}"
+            </div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>— {todayQuote.author}</div>
+          </div>
+
         </div>
       </div>
     </div>
