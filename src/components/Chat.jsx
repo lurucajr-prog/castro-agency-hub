@@ -307,7 +307,7 @@ export default function Chat({ user }) {
                 flex: 1, fontSize: 13, padding: '9px 15px',
                 border: '1px solid #e5e7eb', borderRadius: 18,
                 background: '#f9fafb', color: '#111', outline: 'none',
-                resize: 'none', overflow: 'hidden', lineHeight: 1.5,
+                resize: 'none', overflow: 'auto', lineHeight: 1.5,
                 fontFamily: 'inherit', minHeight: 38, maxHeight: 160,
                 transition: 'height 0.1s ease',
               }}
