@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import Login from './components/Login'
 import Sidebar from './components/Sidebar'
+import TopBar from './components/TopBar'
 import Dashboard from './components/Dashboard'
 import Tasks from './components/Tasks'
 import Referrals from './components/Referrals'
@@ -26,12 +27,12 @@ export default function App() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
-      if(session) fetchProfile(session.user.email)
+      if (session) fetchProfile(session.user.email)
       else setLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
-      if(session) fetchProfile(session.user.email)
+      if (session) fetchProfile(session.user.email)
       else { setProfile(null); setLoading(false) }
     })
     return () => subscription.unsubscribe()
@@ -40,7 +41,7 @@ export default function App() {
   async function fetchProfile(email) {
     setLoading(true)
     const { data, error } = await supabase.from('profiles').select('*').eq('email', email).single()
-    if(error) console.error('Profile fetch error:', error)
+    if (error) console.error('Profile fetch error:', error)
     setProfile(data)
     setLoading(false)
   }
@@ -50,41 +51,44 @@ export default function App() {
     setPage('dashboard')
   }
 
-  if(loading) {
+  if (loading) {
     return (
-      <div style={{ minHeight:'100vh', background:N, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:16 }}>
-        <div style={{ color:'#fff', fontSize:18, fontWeight:500 }}>Castro Agency Hub</div>
+      <div style={{ minHeight: '100vh', background: N, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16 }}>
+        <div style={{ color: '#fff', fontSize: 18, fontWeight: 500 }}>Castro Agency Hub</div>
         <Spinner />
       </div>
     )
   }
 
-  if(!session || !profile) return <Login />
+  if (!session || !profile) return <Login />
 
   const pages = {
-    dashboard:    Dashboard,
-    tasks:        Tasks,
-    referrals:    Referrals,
-    reviews:      Reviews,
-    sales:        Sales,
-    'live-leads': LiveLeads,
-    cancellations:Cancellations,
-    renewals:     Renewals,
-    learning:     Learning,
-    chat:         Chat,
-    dms:          DirectMessages,
-    profiles:     Profiles,
-    suggestions:  Suggestions,
+    dashboard:     Dashboard,
+    tasks:         Tasks,
+    referrals:     Referrals,
+    reviews:       Reviews,
+    sales:         Sales,
+    'live-leads':  LiveLeads,
+    cancellations: Cancellations,
+    renewals:      Renewals,
+    learning:      Learning,
+    chat:          Chat,
+    dms:           DirectMessages,
+    profiles:      Profiles,
+    suggestions:   Suggestions,
   }
 
   const PageComponent = pages[page] || Dashboard
-  const fullHeight = ['chat','dms'].includes(page)
+  const noTopBar = ['chat', 'dms'].includes(page) // full-height pages handle their own header
 
   return (
-    <div style={{ display:'flex', height:'100vh', overflow:'hidden', fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
       <Sidebar user={profile} page={page} setPage={setPage} onLogout={handleLogout} />
-      <div style={{ flex:1, overflow:fullHeight?'hidden':'auto', background:'#f9fafb' }}>
-        <PageComponent user={profile} setPage={setPage} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <TopBar user={profile} page={page} setPage={setPage} />
+        <div style={{ flex: 1, overflow: noTopBar ? 'hidden' : 'auto', background: '#f9fafb' }}>
+          <PageComponent user={profile} setPage={setPage} />
+        </div>
       </div>
     </div>
   )
