@@ -1,178 +1,465 @@
-export const N = '#1B3A6B'
-export const R = '#C8102E'
+// ============================================================
+// Castro Agency Hub — Shared Components
+// Place this file at: src/components/shared.jsx
+// ============================================================
+import { useState, useEffect } from 'react'
 
-export const CHIP_COLORS = {
-  'New Lead':      { bg: '#EEEDFE', tx: '#3C3489' },
-  'Contacted':     { bg: '#FAEEDA', tx: '#633806' },
-  'Quoted':        { bg: '#E6F1FB', tx: '#0C447C' },
-  'Sold':          { bg: '#EAF3DE', tx: '#27500A' },
-  'Not Interested':{ bg: '#FCEBEB', tx: '#791F1F' },
-  'Left a Review': { bg: '#EAF3DE', tx: '#27500A' },
-  'Pending':       { bg: '#FAEEDA', tx: '#633806' },
-  'Declined':      { bg: '#FCEBEB', tx: '#791F1F' },
-  'No Response':   { bg: '#F1EFE8', tx: '#5F5E5A' },
-  'Urgent':        { bg: '#FCEBEB', tx: '#791F1F' },
-  'Normal':        { bg: '#E6F1FB', tx: '#0C447C' },
-  'Low':           { bg: '#F1EFE8', tx: '#5F5E5A' },
-  'Rolled Over':   { bg: '#FAEEDA', tx: '#633806' },
-  'Auto':          { bg: '#E6F1FB', tx: '#0C447C' },
-  'Home':          { bg: '#EAF3DE', tx: '#27500A' },
-  'Life':          { bg: '#EEEDFE', tx: '#3C3489' },
-  'Renters':       { bg: '#E6F1FB', tx: '#0C447C' },
-  'Other':         { bg: '#F1EFE8', tx: '#5F5E5A' },
-}
+// ── Brand color constants (kept for backward compatibility) ──
+export const N = '#1B3A6B'  // navy — use var(--primary) in new code
+export const R = '#C8102E'  // red  — use var(--danger) in new code
 
+// ── Input base style ─────────────────────────────────────────
 export const IS = {
-  width: '100%', fontSize: 13, padding: '7px 10px',
-  border: '1px solid #d1d5db', borderRadius: 6,
-  background: '#fff', color: '#111', outline: 'none',
+  width:          '100%',
+  padding:        '8px 10px',
+  border:         '1px solid var(--border-2)',
+  borderRadius:   7,
+  fontSize:       13,
+  outline:        'none',
+  boxSizing:      'border-box',
+  background:     'var(--surface)',
+  color:          'var(--text-1)',
+  transition:     'border-color 0.15s, box-shadow 0.15s',
+  fontFamily:     'inherit',
 }
 
-export function Chip({ label }) {
-  const s = CHIP_COLORS[label] || { bg: '#F1EFE8', tx: '#5F5E5A' }
+// Input style for error state
+export const IS_ERR = {
+  ...IS,
+  border:     '1px solid var(--danger)',
+  background: 'var(--danger-light)',
+}
+
+// ── Card ─────────────────────────────────────────────────────
+export function Card({ children, mb, p, style, onClick, ...props }) {
   return (
-    <span style={{
-      background: s.bg, color: s.tx,
-      padding: '2px 8px', borderRadius: 99,
-      fontSize: 11, fontWeight: 500,
-      display: 'inline-block', whiteSpace: 'nowrap',
-    }}>{label}</span>
-  )
-}
-
-export function Card({ children, p = 16, mb = 0, style: st = {} }) {
-  return (
-    <div style={{
-      background: '#fff', border: '1px solid #e5e7eb',
-      borderRadius: 10, padding: p, marginBottom: mb, ...st,
-    }}>{children}</div>
-  )
-}
-
-export function Btn({ children, variant = 'primary', sm = false, style: st = {}, ...props }) {
-  const base = {
-    cursor: 'pointer', borderRadius: 6, fontWeight: 500,
-    fontSize: sm ? 11 : 13,
-    padding: sm ? '4px 10px' : '7px 14px',
-    display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none',
-  }
-  const vs = {
-    primary: { background: N, color: '#fff' },
-    outline: { background: 'transparent', color: N, border: `1px solid ${N}` },
-    ghost:   { background: 'transparent', color: '#6b7280' },
-    danger:  { background: R, color: '#fff' },
-  }
-  return <button {...props} style={{ ...base, ...vs[variant], ...st }}>{children}</button>
-}
-
-export function Field({ label, children }) {
-  return (
-    <div style={{ marginBottom: 11 }}>
-      {label && <label style={{ display: 'block', fontSize: 11, fontWeight: 500, color: '#6b7280', marginBottom: 4 }}>{label}</label>}
+    <div
+      onClick={onClick}
+      style={{
+        background:   'var(--surface)',
+        border:       '1px solid var(--border)',
+        borderRadius: 10,
+        padding:      p !== undefined ? p : 14,
+        marginBottom: mb || 0,
+        ...style,
+      }}
+      {...props}
+    >
       {children}
     </div>
   )
 }
 
-// Modal no longer closes on backdrop click — only X button or Cancel
-// This prevents accidental data loss when clicking near the edge
-export function Modal({ title, onClose, children, width = 440 }) {
+// ── Button ───────────────────────────────────────────────────
+export function Btn({ children, onClick, disabled, variant, sm, style, type = 'button', ...props }) {
+  const base = {
+    display:        'inline-flex',
+    alignItems:     'center',
+    justifyContent: 'center',
+    gap:            5,
+    padding:        sm ? '4px 11px' : '8px 15px',
+    borderRadius:   7,
+    fontSize:       sm ? 11 : 13,
+    fontWeight:     500,
+    cursor:         disabled ? 'not-allowed' : 'pointer',
+    opacity:        disabled ? 0.55 : 1,
+    transition:     'background 0.15s, opacity 0.15s, border-color 0.15s',
+    border:         'none',
+    flexShrink:     0,
+    fontFamily:     'inherit',
+    ...style,
+  }
+
+  if (variant === 'outline') {
+    return (
+      <button type={type} onClick={onClick} disabled={disabled} style={{ ...base, background: 'transparent', border: '1px solid var(--border-2)', color: 'var(--text-2)' }} {...props}>
+        {children}
+      </button>
+    )
+  }
+  if (variant === 'danger') {
+    return (
+      <button type={type} onClick={onClick} disabled={disabled} style={{ ...base, background: 'var(--danger)', color: '#fff' }} {...props}>
+        {children}
+      </button>
+    )
+  }
+  if (variant === 'ghost') {
+    return (
+      <button type={type} onClick={onClick} disabled={disabled} style={{ ...base, background: 'transparent', color: 'var(--text-3)', border: 'none' }} {...props}>
+        {children}
+      </button>
+    )
+  }
+  return (
+    <button type={type} onClick={onClick} disabled={disabled} style={{ ...base, background: 'var(--primary)', color: '#fff' }} {...props}>
+      {children}
+    </button>
+  )
+}
+
+// ── Label / Field wrapper ────────────────────────────────────
+export function Field({ label, children, style, error, mb }) {
+  return (
+    <div style={{ marginBottom: mb !== undefined ? mb : 12, ...style }}>
+      {label && (
+        <label style={{
+          display:       'block',
+          fontSize:      11,
+          fontWeight:    500,
+          color:         'var(--text-4)',
+          marginBottom:  4,
+          textTransform: 'uppercase',
+          letterSpacing: 0.4,
+        }}>
+          {label}
+        </label>
+      )}
+      {children}
+      {error && (
+        <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 3, fontWeight: 500 }}>
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Chip / badge ─────────────────────────────────────────────
+const CHIP_COLORS = {
+  // Referral statuses
+  'New Lead':       { bg: 'var(--surface-3)', tx: 'var(--text-2)' },
+  'Contacted':      { bg: 'var(--primary-mid)', tx: '#1e40af' },
+  'Quoted':         { bg: 'var(--warning-light)', tx: '#92400e' },
+  'Sold':           { bg: 'var(--success-light)', tx: '#166534' },
+  'Not Interested': { bg: 'var(--danger-light)', tx: '#991b1b' },
+  // Review statuses
+  'Pending':        { bg: 'var(--surface-3)', tx: 'var(--text-2)' },
+  'Left a Review':  { bg: 'var(--success-light)', tx: '#166534' },
+  'Declined':       { bg: 'var(--danger-light)', tx: '#991b1b' },
+  'No Response':    { bg: 'var(--surface-3)', tx: 'var(--text-3)' },
+  // Tasks
+  'Complete':       { bg: 'var(--success-light)', tx: '#166534' },
+  'In Progress':    { bg: 'var(--warning-light)', tx: '#92400e' },
+  'Overdue':        { bg: 'var(--danger-light)', tx: '#991b1b' },
+}
+
+export function Chip({ label, style }) {
+  const c = CHIP_COLORS[label] || { bg: 'var(--surface-3)', tx: 'var(--text-2)' }
+  return (
+    <span style={{
+      background:   c.bg,
+      color:        c.tx,
+      padding:      '2px 9px',
+      borderRadius: 99,
+      fontSize:     11,
+      fontWeight:   500,
+      display:      'inline-block',
+      whiteSpace:   'nowrap',
+      ...style,
+    }}>
+      {label}
+    </span>
+  )
+}
+
+// ── Spinner ──────────────────────────────────────────────────
+export function Spinner({ size = 32, padding = 48 }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding }}>
+      <div style={{
+        width:       size,
+        height:      size,
+        border:      '3px solid var(--border)',
+        borderTopColor: 'var(--primary)',
+        borderRadius: '50%',
+        animation:   'spin 0.7s linear infinite',
+      }} />
+    </div>
+  )
+}
+
+// ── EmptyState ───────────────────────────────────────────────
+export function EmptyState({ text, icon = '📭', action, onAction }) {
+  return (
+    <div style={{ padding: '44px 20px', textAlign: 'center' }}>
+      <div style={{ fontSize: 38, marginBottom: 10, opacity: 0.45 }}>{icon}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: action ? 14 : 0, lineHeight: 1.5 }}>
+        {text}
+      </div>
+      {action && onAction && (
+        <Btn sm onClick={onAction}>{action}</Btn>
+      )}
+    </div>
+  )
+}
+
+// ── Skeleton components ──────────────────────────────────────
+export function SkeletonLine({ w = '100%', h = 13, mb = 8 }) {
   return (
     <div
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(15,29,53,0.5)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        zIndex: 1000, paddingTop: 60,
-      }}
-    >
-      <div style={{
-        background: '#fff', border: '1px solid #e5e7eb',
-        borderRadius: 10, width, maxWidth: '92vw', maxHeight: '80vh', overflow: 'auto',
-      }}>
-        <div style={{
-          padding: '13px 18px', borderBottom: '1px solid #e5e7eb',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <span style={{ fontSize: 14, fontWeight: 500, color: '#111' }}>{title}</span>
-          <button
-            onClick={onClose}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 20, color: '#9ca3af', lineHeight: 1, padding: '0 4px' }}
-          >×</button>
-        </div>
-        <div style={{ padding: 18 }}>{children}</div>
-      </div>
-    </div>
+      className="skeleton"
+      style={{ width: w, height: h, marginBottom: mb, borderRadius: 4 }}
+    />
   )
 }
 
-export function TabBar({ tabs, active, setActive }) {
+export function SkeletonCard({ lines = 3, mb = 12 }) {
   return (
-    <div style={{ display: 'flex', borderBottom: '1px solid #e5e7eb', marginBottom: 15 }}>
-      {tabs.map(t => (
-        <button key={t} onClick={() => setActive(t)} style={{
-          padding: '7px 13px', border: 'none',
-          borderBottom: active === t ? `2px solid ${N}` : '2px solid transparent',
-          background: 'none', cursor: 'pointer', fontSize: 12,
-          fontWeight: active === t ? 500 : 400,
-          color: active === t ? '#111' : '#6b7280',
-          marginBottom: -1,
-        }}>{t}</button>
+    <Card mb={mb}>
+      {Array.from({ length: lines }).map((_, i) => (
+        <SkeletonLine
+          key={i}
+          w={i === 0 ? '55%' : i === lines - 1 ? '35%' : '100%'}
+          mb={i === lines - 1 ? 0 : 9}
+        />
       ))}
-    </div>
+    </Card>
   )
 }
 
-export function SectionHeader({ title, action, onAction }) {
+export function SkeletonTable({ rows = 4 }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-      <span style={{ fontSize: 13, fontWeight: 500, color: '#111' }}>{title}</span>
-      {action && <Btn variant="ghost" sm onClick={onAction} style={{ fontSize: 11 }}>{action} →</Btn>}
-    </div>
-  )
-}
-
-export function pct(v, m) { return m ? Math.min(100, Math.round(v / m * 100)) : 0 }
-export function pcol(v, m) {
-  const p = pct(v, m)
-  return p >= 80 ? '#16a34a' : p >= 50 ? '#d97706' : '#dc2626'
-}
-
-export function MiniBar({ val, max }) {
-  return (
-    <div>
-      <div style={{ height: 3, background: '#f3f4f6', borderRadius: 99, marginBottom: 2 }}>
-        <div style={{ width: pct(val, max) + '%', height: '100%', background: pcol(val, max), borderRadius: 99 }} />
+    <Card p={0}>
+      {/* Header */}
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 16 }}>
+        {['30%','20%','15%','20%'].map((w, i) => (
+          <SkeletonLine key={i} w={w} h={10} mb={0} />
+        ))}
       </div>
-      <span style={{ fontSize: 10, color: '#9ca3af' }}>{val} / {max}</span>
-    </div>
+      {/* Rows */}
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ padding: '12px 14px', borderBottom: i < rows - 1 ? '1px solid var(--border)' : 'none', display: 'flex', gap: 16, alignItems: 'center' }}>
+          {['25%','18%','12%','18%','10%'].map((w, j) => (
+            <SkeletonLine key={j} w={w} h={12} mb={0} />
+          ))}
+        </div>
+      ))}
+    </Card>
   )
 }
 
-export function Avatar({ ini, isAdmin, size = 28 }) {
+// ── Modal ────────────────────────────────────────────────────
+export function Modal({ title, onClose, children, width = 520 }) {
+  // ESC key closes modal
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   return (
     <div style={{
-      width: size, height: size, borderRadius: '50%',
-      background: isAdmin ? R : '#dbeafe',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.33, fontWeight: 500,
-      color: isAdmin ? '#fff' : '#1e40af', flexShrink: 0,
-    }}>{ini}</div>
-  )
-}
-
-export function Spinner() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+      position:   'fixed',
+      inset:      0,
+      background: 'rgba(0,0,0,0.5)',
+      zIndex:     1000,
+      display:    'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding:    20,
+    }}>
       <div style={{
-        width: 24, height: 24, border: `2px solid ${N}`,
-        borderTopColor: 'transparent', borderRadius: '50%',
-        animation: 'spin 0.7s linear infinite',
-      }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        background:    'var(--surface)',
+        borderRadius:  14,
+        width:         '100%',
+        maxWidth:      width,
+        maxHeight:     '90vh',
+        display:       'flex',
+        flexDirection: 'column',
+        boxShadow:     'var(--shadow-lg)',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding:        '16px 20px',
+          borderBottom:   '1px solid var(--border)',
+          display:        'flex',
+          justifyContent: 'space-between',
+          alignItems:     'center',
+          flexShrink:     0,
+        }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>{title}</span>
+          <button
+            onClick={onClose}
+            style={{
+              border:     'none',
+              background: 'none',
+              fontSize:   22,
+              cursor:     'pointer',
+              color:      'var(--text-4)',
+              lineHeight: 1,
+              padding:    '0 2px',
+            }}
+          >
+            ×
+          </button>
+        </div>
+        {/* Body */}
+        <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
+          {children}
+        </div>
+      </div>
     </div>
   )
 }
 
-export function EmptyState({ text }) {
-  return <div style={{ padding: 28, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>{text}</div>
+// ── ConfirmModal — replaces window.confirm() ─────────────────
+export function ConfirmModal({
+  title    = 'Are you sure?',
+  message,
+  confirmLabel = 'Confirm',
+  cancelLabel  = 'Cancel',
+  onConfirm,
+  onCancel,
+  danger   = false,
+}) {
+  return (
+    <div style={{
+      position:   'fixed',
+      inset:      0,
+      background: 'rgba(0,0,0,0.5)',
+      zIndex:     2000,
+      display:    'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding:    20,
+    }}>
+      <div style={{
+        background:   'var(--surface)',
+        borderRadius: 14,
+        padding:      '24px 24px 20px',
+        maxWidth:     380,
+        width:        '100%',
+        boxShadow:    'var(--shadow-lg)',
+      }}>
+        <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-1)', marginBottom: 8 }}>
+          {title}
+        </div>
+        {message && (
+          <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 22, lineHeight: 1.6 }}>
+            {message}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Btn variant="outline" onClick={onCancel}>{cancelLabel}</Btn>
+          <Btn variant={danger ? 'danger' : undefined} onClick={onConfirm}>
+            {confirmLabel}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Toast ────────────────────────────────────────────────────
+export function Toast({ emoji, title, subtitle, borderColor, onDone, duration = 3500 }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, duration)
+    return () => clearTimeout(t)
+  }, [])
+
+  return (
+    <div style={{
+      position:     'fixed',
+      top:          80,
+      left:         '50%',
+      transform:    'translateX(-50%)',
+      background:   'var(--surface)',
+      border:       `2px solid ${borderColor || 'var(--primary)'}`,
+      borderRadius: 16,
+      padding:      '18px 32px',
+      zIndex:       9998,
+      textAlign:    'center',
+      boxShadow:    'var(--shadow-lg)',
+      animation:    'toastIn 0.4s ease',
+      minWidth:     260,
+    }}>
+      {emoji && <div style={{ fontSize: 40, marginBottom: 8 }}>{emoji}</div>}
+      <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-1)', marginBottom: 4 }}>{title}</div>
+      {subtitle && <div style={{ fontSize: 13, color: 'var(--text-3)' }}>{subtitle}</div>}
+    </div>
+  )
+}
+
+// ── Stat card ────────────────────────────────────────────────
+export function StatCard({ label, value, color, icon, trend, trendLabel }) {
+  const trendUp = trend > 0
+  const trendDown = trend < 0
+
+  return (
+    <div style={{
+      background:   'var(--surface)',
+      border:       '1px solid var(--border)',
+      borderRadius: 10,
+      padding:      '14px 16px',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ fontSize: 10, color: 'var(--text-4)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          {label}
+        </div>
+        {icon && <div style={{ fontSize: 18, opacity: 0.7 }}>{icon}</div>}
+      </div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: color || 'var(--text-1)', margin: '6px 0 4px' }}>
+        {value}
+      </div>
+      {trend !== undefined && (
+        <div style={{
+          fontSize: 11,
+          fontWeight: 500,
+          color: trendUp ? 'var(--success)' : trendDown ? 'var(--danger)' : 'var(--text-4)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 3,
+        }}>
+          {trendUp ? '▲' : trendDown ? '▼' : '—'}
+          <span>{trendLabel || (Math.abs(trend) + '%')}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Section header ───────────────────────────────────────────
+export function SectionHeader({ title, subtitle, action, onAction }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 }}>
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 600, color: 'var(--text-1)', marginBottom: 2 }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{subtitle}</div>}
+      </div>
+      {action && onAction && (
+        <Btn variant="outline" sm onClick={onAction}>{action}</Btn>
+      )}
+    </div>
+  )
+}
+
+// ── Table header cell helper ─────────────────────────────────
+export function TH({ children, right, style }) {
+  return (
+    <th style={{
+      padding:       '8px 12px',
+      textAlign:     right ? 'right' : 'left',
+      fontSize:      10,
+      fontWeight:    500,
+      color:         'var(--text-4)',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+      background:    'var(--surface-2)',
+      ...style,
+    }}>
+      {children}
+    </th>
+  )
+}
+
+// ── Divider ──────────────────────────────────────────────────
+export function Divider({ my = 12 }) {
+  return (
+    <div style={{
+      height:     1,
+      background: 'var(--border)',
+      margin:     `${my}px 0`,
+    }} />
+  )
 }
