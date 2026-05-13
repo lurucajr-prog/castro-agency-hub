@@ -28,7 +28,7 @@ function showNotification(title, body, onClick) {
   setTimeout(() => n.close(), 6000)
 }
 
-export default function DirectMessages({ user, setPage }) {
+export default function DirectMessages({ user, setPage, darkMode, dmTarget, onDmTargetConsumed }) {
   const [profiles,       setProfiles]       = useState([])
   const [selected,       setSelected]       = useState(null)
   const [conversations,  setConversations]  = useState({})
@@ -51,6 +51,17 @@ export default function DirectMessages({ user, setPage }) {
   const selectedRef = useRef(null)
 
   useEffect(() => { selectedRef.current = selected }, [selected])
+
+  // Auto-select a conversation when arriving from a profile DM button
+  useEffect(() => {
+    if (dmTarget && profiles.length > 0) {
+      const target = profiles.find(p => p.id === dmTarget)
+      if (target) {
+        selectConversation(target)
+        onDmTargetConsumed?.()
+      }
+    }
+  }, [dmTarget, profiles])
 
   useEffect(() => {
     fetchData()
