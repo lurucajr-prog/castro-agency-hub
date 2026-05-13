@@ -93,6 +93,9 @@ export default function Chat({ user }) {
   const typingTimerRef   = useRef(null)
   const isTypingRef      = useRef(false)
 
+  // Read receipts
+  const [channelReads,   setChannelReads]   = useState({})   // { uid: { channel: last_read_at } }
+
   // Unread tracking
   const [unreadByChannel, setUnreadByChannel] = useState({})
   const lastSeenRef       = useRef({})         // { channelId: lastSeenTimestamp }
@@ -138,6 +141,11 @@ export default function Chat({ user }) {
   useEffect(() => {
     lastSeenRef.current[channel] = Date.now()
     setUnreadByChannel(prev => ({ ...prev, [channel]: 0 }))
+    // Upsert read receipt
+    supabase.from('channel_reads').upsert(
+      { uid: user.id, channel, last_read_at: new Date().toISOString() },
+      { onConflict: 'uid,channel' }
+    )
   }, [channel])
 
   // Keyboard shortcut: Ctrl+F or Cmd+F opens search
@@ -165,13 +173,14 @@ export default function Chat({ user }) {
   }
 
   async function fetchAll() {
-    const [msgs, p, r, pls, pvs, pinned] = await Promise.all([
+    const [msgs, p, r, pls, pvs, pinned, reads] = await Promise.all([
       supabase.from('messages').select('*').order('created_at', { ascending: true }).limit(500),
       supabase.from('profiles').select('*'),
       supabase.from('message_reactions').select('*'),
       supabase.from('polls').select('*'),
       supabase.from('poll_votes').select('*'),
       supabase.from('messages').select('*').eq('pinned', true).order('pinned_at', { ascending: false }),
+      supabase.from('channel_reads').select('*'),
     ])
 
     // Group messages by channel
@@ -212,6 +221,14 @@ export default function Chat({ user }) {
 
     // Initialize last seen to now for all channels
     accessibleChannels.forEach(c => { lastSeenRef.current[c.id] = Date.now() })
+
+    // Group channel reads: { uid: { channelId: last_read_at } }
+    const readsMap = {}
+    ;(reads.data || []).forEach(r => {
+      if (!readsMap[r.uid]) readsMap[r.uid] = {}
+      readsMap[r.uid][r.channel] = r.last_read_at
+    })
+    setChannelReads(readsMap)
 
     setLoading(false)
 
@@ -336,11 +353,25 @@ export default function Chat({ user }) {
       })
       .subscribe()
 
+    // Read receipts subscription
+    const readsCh = supabase.channel('channel_reads_v1')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'channel_reads' }, payload => {
+        const r = payload.new
+        if (r) {
+          setChannelReads(prev => ({
+            ...prev,
+            [r.uid]: { ...(prev[r.uid] || {}), [r.channel]: r.last_read_at }
+          }))
+        }
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(msgCh)
       supabase.removeChannel(rxCh)
       supabase.removeChannel(voteCh)
       supabase.removeChannel(typingCh)
+      supabase.removeChannel(readsCh)
     }
   }
 
@@ -465,6 +496,11 @@ export default function Chat({ user }) {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
     await clearTyping()
     await supabase.from('messages').insert({ uid: user.id, text: trimmed, channel })
+    // Mark as read up to now
+    supabase.from('channel_reads').upsert(
+      { uid: user.id, channel, last_read_at: new Date().toISOString() },
+      { onConflict: 'uid,channel' }
+    )
   }
 
   async function sendGif(gifUrl) {
@@ -847,6 +883,27 @@ export default function Chat({ user }) {
             )
           })}
 
+          {/* Seen by — shows under the last real message */}
+          {(() => {
+            const lastMsg = currentMsgs[currentMsgs.length - 1]
+            if (!lastMsg) return null
+            const seenBy = profiles.filter(p =>
+              p.id !== user.id &&
+              canSee(p.name, channel) &&
+              channelReads[p.id]?.[channel] &&
+              new Date(channelReads[p.id][channel]) >= new Date(lastMsg.created_at)
+            )
+            if (seenBy.length === 0) return null
+            return (
+              <div style={{ display:'flex', alignItems:'center', gap:5, justifyContent:'flex-end', padding:'2px 4px' }}>
+                <span style={{ fontSize:10, color:'var(--text-4)' }}>Seen by</span>
+                {seenBy.map(p => (
+                  <div key={p.id} title={p.name} style={{ width:16, height:16, borderRadius:'50%', background: p.role==='admin' ? R : 'var(--primary-mid)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:7, fontWeight:700, color: p.role==='admin' ? '#fff' : '#1e40af' }}>{p.ini}</div>
+                ))}
+              </div>
+            )
+          })()}
+
           {/* Typing indicator */}
           {currentTyping.length > 0 && (
             <div style={{ display:'flex', alignItems:'center', gap:8, padding:'4px 0' }}>
@@ -908,12 +965,14 @@ export default function Chat({ user }) {
             {gifsLoading ? (
               <div style={{ textAlign:'center', color:'var(--text-4)', padding:'20px 0', fontSize:12 }}>Loading GIFs…</div>
             ) : (
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:5, maxHeight:180, overflowY:'auto' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:6, maxHeight:300, overflowY:'auto' }}>
                 {gifs.map(g => (
-                  <img key={g.id} src={g.images.fixed_height_small.url} alt={g.title} onClick={() => sendGif(g.images.original.url)}
-                    style={{ width:'100%', height:70, objectFit:'cover', borderRadius:6, cursor:'pointer', border:'2px solid transparent' }}
-                    onMouseEnter={e => e.currentTarget.style.border=`2px solid ${N}`}
-                    onMouseLeave={e => e.currentTarget.style.border='2px solid transparent'} />
+                  <div key={g.id} onClick={() => sendGif(g.images.original.url)} style={{ position:'relative', borderRadius:10, overflow:'hidden', cursor:'pointer', border:'2px solid transparent', transition:'border-color 0.12s' }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor=N}
+                    onMouseLeave={e => e.currentTarget.style.borderColor='transparent'}>
+                    <img src={g.images.fixed_height_small.url} alt={g.title}
+                      style={{ width:'100%', height:130, objectFit:'cover', display:'block' }} />
+                  </div>
                 ))}
               </div>
             )}
