@@ -463,3 +463,93 @@ export function Divider({ my = 12 }) {
     }} />
   )
 }
+
+// ── TabBar ───────────────────────────────────────────────────
+// Usage: <TabBar tabs={['Tab A','Tab B']} active={tab} setActive={setTab} />
+export function TabBar({ tabs, active, setActive }) {
+  return (
+    <div style={{
+      display:      'flex',
+      gap:          2,
+      borderBottom: '1px solid var(--border)',
+      marginBottom: 16,
+      overflowX:    'auto',
+    }}>
+      {tabs.map(t => (
+        <button
+          key={t}
+          onClick={() => setActive(t)}
+          style={{
+            padding:       '9px 16px',
+            border:        'none',
+            borderBottom:  active === t ? '2px solid var(--primary)' : '2px solid transparent',
+            background:    'none',
+            cursor:        'pointer',
+            fontSize:      12,
+            fontWeight:    active === t ? 600 : 400,
+            color:         active === t ? 'var(--primary)' : 'var(--text-3)',
+            whiteSpace:    'nowrap',
+            marginBottom:  -1,
+            transition:    'color 0.15s, border-color 0.15s',
+            fontFamily:    'inherit',
+          }}
+        >
+          {t}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── pct — percentage helper ───────────────────────────────────
+// Returns 0–100 integer, capped at 100
+export function pct(val, max) {
+  if (!max || max <= 0) return 0
+  return Math.min(100, Math.round((val / max) * 100))
+}
+
+// ── pcol — progress color ─────────────────────────────────────
+// Returns a color based on how close val is to max
+// < 50% = red, 50–79% = orange/warning, 80%+ = green
+export function pcol(val, max) {
+  const p = pct(val, max)
+  if (p >= 100) return '#166534'   // exceeded — dark green
+  if (p >= 80)  return '#16a34a'   // on track — green
+  if (p >= 50)  return '#d97706'   // halfway — amber
+  return '#dc2626'                  // behind — red
+}
+
+// ── MiniBar — inline progress bar ────────────────────────────
+// Usage: <MiniBar val={7} max={10} />
+export function MiniBar({ val, max }) {
+  const p       = pct(val, max)
+  const color   = pcol(val, max)
+  const display = max > 0 ? `${val}/${max}` : String(val)
+
+  return (
+    <div style={{ minWidth: 80 }}>
+      <div style={{
+        fontSize:    12,
+        fontWeight:  700,
+        color,
+        marginBottom: 3,
+      }}>
+        {display}
+      </div>
+      <div style={{
+        height:       5,
+        background:   'var(--surface-3)',
+        borderRadius: 99,
+        overflow:     'hidden',
+      }}>
+        <div style={{
+          height:       '100%',
+          width:        `${p}%`,
+          background:   color,
+          borderRadius: 99,
+          transition:   'width 0.4s ease',
+        }} />
+      </div>
+    </div>
+  )
+}
