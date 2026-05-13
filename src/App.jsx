@@ -48,6 +48,7 @@ export default function App() {
   const [page,          setPage]          = useState('dashboard')
   const [darkMode,      setDarkMode]      = useState(false)
   const [visitedPages,  setVisitedPages]  = useState(() => new Set(['dashboard']))
+  const [dmTarget,      setDmTarget]      = useState(null)  // profile id to auto-open in DMs
 
   // Track visited pages so persistent pages mount on first visit and stay mounted
   useEffect(() => {
@@ -97,7 +98,14 @@ export default function App() {
     await supabase.auth.signOut()
     setPage('dashboard')
     setDarkMode(false)
+    setDmTarget(null)
     setVisitedPages(new Set(['dashboard']))
+  }
+
+  // Navigate to DMs and pre-select a conversation
+  function openDm(profileId) {
+    setDmTarget(profileId)
+    setPage('dms')
   }
 
   // ── Loading screen ─────────────────────────────────────────
@@ -169,7 +177,13 @@ export default function App() {
               overflow:       'hidden',
             }}>
               <ErrorBoundary>
-                <DirectMessages user={profile} setPage={setPage} darkMode={darkMode} />
+                <DirectMessages
+                  user={profile}
+                  setPage={setPage}
+                  darkMode={darkMode}
+                  dmTarget={dmTarget}
+                  onDmTargetConsumed={() => setDmTarget(null)}
+                />
               </ErrorBoundary>
             </div>
           )}
@@ -183,6 +197,7 @@ export default function App() {
                     user={profile}
                     setPage={setPage}
                     darkMode={darkMode}
+                    openDm={openDm}
                   />
                 </div>
               </ErrorBoundary>
