@@ -525,7 +525,7 @@ export default function Dashboard({ user, setPage }) {
           {lbData.slice(3).map((item, i) => {
             const isMe = item.m.id === user.id
             return (
-              <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 0', borderTop: '0.5px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent', margin: isMe ? '0 -14px', padding: isMe ? '6px 14px' : '6px 0' }}>
+              <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, borderTop: '0.5px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent', padding: isMe ? '6px 14px' : '6px 0' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-4)', width: 20 }}>{i + 4}.</span>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', background: isMe ? 'var(--primary)' : 'var(--primary-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 600, color: isMe ? '#fff' : '#1e40af', flexShrink: 0 }}>{item.m.ini}</div>
                 <span style={{ fontSize: 12, flex: 1, color: 'var(--text-1)', fontWeight: isMe ? 600 : 400 }}>
