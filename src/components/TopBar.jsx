@@ -277,6 +277,33 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
                   </div>
                 </div>
 
+                {/* Push notification permission nudge */}
+                {'Notification' in window && Notification.permission !== 'granted' && (
+                  <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--primary-light)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)', marginBottom: 3 }}>
+                      🔔 Get alerts when you're away
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 8, lineHeight: 1.5 }}>
+                      Enable browser notifications to get alerted for DMs and @mentions even when you're on another tab.
+                    </div>
+                    {Notification.permission === 'denied' ? (
+                      <div style={{ fontSize: 11, color: 'var(--danger)', lineHeight: 1.5 }}>
+                        Notifications are blocked. Click the 🔒 lock icon in your browser's address bar to allow them for this site.
+                      </div>
+                    ) : (
+                      <button
+                        onClick={async () => {
+                          await Notification.requestPermission()
+                          setPanelOpen(false)
+                        }}
+                        style={{ fontSize: 11, fontWeight: 600, color: '#fff', background: 'var(--primary)', border: 'none', borderRadius: 6, padding: '5px 13px', cursor: 'pointer', fontFamily: 'inherit' }}
+                      >
+                        Enable notifications
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 {/* DM row */}
                 {dmUnread > 0 && (
                   <div
