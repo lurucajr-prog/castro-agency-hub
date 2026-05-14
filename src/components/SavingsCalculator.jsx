@@ -114,7 +114,7 @@ export default function SavingsCalculator({ onClose }) {
       display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
       zIndex: 2000,
       overflowY: 'auto',
-      padding: '32px 20px 40px',
+      padding: '64px 20px 40px',
     }}>
       <div style={{
         background: 'var(--surface)', borderRadius: 16,
