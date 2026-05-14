@@ -22,6 +22,8 @@ import Chat                  from './components/Chat'
 import DirectMessages        from './components/DirectMessages'
 import Profiles              from './components/Profiles'
 import Suggestions           from './components/Suggestions'
+import AdminSettings         from './components/AdminSettings'
+import AuditLog              from './components/AuditLog'
 import { Spinner }           from './components/shared'
 
 const PAGES = {
@@ -36,6 +38,8 @@ const PAGES = {
   learning:      Learning,
   profiles:      Profiles,
   suggestions:   Suggestions,
+  settings:      AdminSettings,
+  'audit-log':   AuditLog,
 }
 
 // These pages stay mounted once visited so navigating back is instant
