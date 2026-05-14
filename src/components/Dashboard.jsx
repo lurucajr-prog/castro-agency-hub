@@ -163,7 +163,24 @@ export default function Dashboard({ user, setPage }) {
   // Month-specific key so goal celebration resets automatically each new month
   const celebKey = `team_goal_celebrated_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 
-  useEffect(() => { fetchAll() }, [])
+  useEffect(() => {
+    fetchAll()
+
+    // Realtime subscription lives HERE, not inside fetchAll
+    // This way it only runs once and gets properly cleaned up
+    const salesRtCh = supabase.channel('dashboard_sales_rt')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales' }, payload => {
+        const sale = payload.new
+        const mStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+        if (sale.created_at >= mStart) {
+          setData(prev => prev ? ({ ...prev, monthSales: [sale, ...prev.monthSales] }) : prev)
+        }
+        setActivityFeed(prev => [{ ...sale, _type: 'sale' }, ...prev].slice(0, 8))
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(salesRtCh) }
+  }, [])
 
   async function fetchAll() {
     const today         = now.toISOString().split('T')[0]
@@ -242,21 +259,7 @@ export default function Dashboard({ user, setPage }) {
     ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8)
     setActivityFeed(feed)
 
-    // ── Real-time: update monthSales + activity feed when sales are logged ──
-    const salesRtCh = supabase.channel('dashboard_sales_rt')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales' }, payload => {
-        const sale = payload.new
-        // Add to monthSales if it belongs to the current month
-        const mStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
-        if (sale.created_at >= mStart) {
-          setData(prev => prev ? ({ ...prev, monthSales: [sale, ...prev.monthSales] }) : prev)
-        }
-        // Add to activity feed
-        setActivityFeed(prev => [{ ...sale, _type: 'sale' }, ...prev].slice(0, 8))
-      })
-      .subscribe()
-
-    // Admin-only: fetch quick stats for the summary section
+    // ── Admin-only: fetch quick stats for the summary section ──
     if (user.role === 'admin') {
       const today = new Date().toISOString().split('T')[0]
       const [sugg, leadRets, refFollowUp] = await Promise.all([
