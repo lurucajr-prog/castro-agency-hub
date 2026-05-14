@@ -47,7 +47,7 @@ export default function Referrals({ user }) {
   const [expanded,      setExpanded]      = useState(null)
   const [form,          setForm]          = useState({
     referred_by: '', prospect: '', phone: '', status: 'New Lead',
-    notes: '', follow_up_date: '', assigned_to: '', assigned_to_name: '',
+    notes: '', follow_up_date: '', assigned_to: '', assigned_to_name: '', source_type: 'Word of Mouth',
   })
   const [saving,        setSaving]        = useState(false)
   const [soldToast,     setSoldToast]     = useState(null)
@@ -123,10 +123,11 @@ export default function Referrals({ user }) {
       follow_up_date:   form.follow_up_date || null,
       assigned_to:      form.assigned_to || null,
       assigned_to_name: assignedProfile?.name || null,
+      source_type:      form.source_type || 'Word of Mouth',
     }).select().single()
     if (error) { console.error('[Referrals] add error', error); setSaving(false); return }
     if (data) setRefs(rs => [data, ...rs])
-    setForm({ referred_by:'', prospect:'', phone:'', status:'New Lead', notes:'', follow_up_date:'', assigned_to:'', assigned_to_name:'' })
+    setForm({ referred_by:'', prospect:'', phone:'', status:'New Lead', notes:'', follow_up_date:'', assigned_to:'', assigned_to_name:'', source_type:'Word of Mouth' })
     setSaving(false)
   }
 
@@ -242,6 +243,11 @@ export default function Referrals({ user }) {
                 <Field label="Follow-up date">
                   <input style={IS} type="date" value={form.follow_up_date} min={today} onChange={e => setForm(f => ({ ...f, follow_up_date:e.target.value }))} />
                 </Field>
+                <Field label="How did they find us?">
+                  <select style={IS} value={form.source_type} onChange={e => setForm(f => ({ ...f, source_type:e.target.value }))}>
+                    {['Word of Mouth','Google / Online','Social Media','Walked In','Direct Ask','Other'].map(o => <option key={o}>{o}</option>)}
+                  </select>
+                </Field>
                 <Field label="Notes" style={{ gridColumn:'1 / -1' }}>
                   <input style={IS} value={form.notes} onChange={e => setForm(f => ({ ...f, notes:e.target.value }))} placeholder="Optional context…" />
                 </Field>
@@ -320,7 +326,7 @@ export default function Referrals({ user }) {
                                 </div>
 
                                 {/* Notes + follow-up + assignment row */}
-                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }} onClick={e => e.stopPropagation()}>
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10 }} onClick={e => e.stopPropagation()}>
 
                                   {/* Notes */}
                                   <Field label="Notes" mb={0}>
@@ -363,6 +369,21 @@ export default function Referrals({ user }) {
                                     >
                                       <option value="">Unassigned</option>
                                       {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    </select>
+                                  </Field>
+
+                                  {/* Source */}
+                                  <Field label="How they found us" mb={0}>
+                                    <select
+                                      value={r.source_type || 'Word of Mouth'}
+                                      onChange={async e => {
+                                        const src = e.target.value
+                                        await supabase.from('referrals').update({ source_type: src }).eq('id', r.id)
+                                        setRefs(rs => rs.map(x => x.id === r.id ? { ...x, source_type: src } : x))
+                                      }}
+                                      style={{ ...IS, fontSize:12 }}
+                                    >
+                                      {['Word of Mouth','Google / Online','Social Media','Walked In','Direct Ask','Other'].map(o => <option key={o}>{o}</option>)}
                                     </select>
                                   </Field>
                                 </div>
