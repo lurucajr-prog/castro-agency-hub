@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase }             from '../lib/supabase'
 import { N, Card, Btn, Field, Chip, Spinner, EmptyState, IS, ConfirmModal } from './shared'
 import { launchConfetti }        from '../utils/animations'
+import { exportCSV }             from '../utils/csv'
 
 const STATUSES = ['New Lead', 'Contacted', 'Quoted', 'Sold', 'Not Interested']
 
@@ -186,8 +187,29 @@ export default function Referrals({ user }) {
     <>
       <div style={{ padding:20 }}>
         <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:18, fontWeight:600, color:'var(--text-1)', marginBottom:2 }}>Referral tracker</div>
-          <div style={{ fontSize:12, color:'var(--text-3)' }}>Log referrals quickly — even mid-call</div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <div>
+              <div style={{ fontSize:18, fontWeight:600, color:'var(--text-1)', marginBottom:2 }}>Referral tracker</div>
+              <div style={{ fontSize:12, color:'var(--text-3)' }}>Log referrals quickly — even mid-call</div>
+            </div>
+            {refs.length > 0 && (
+              <Btn sm variant="outline" onClick={() => {
+                const rows = refs.map(r => [
+                  new Date(r.created_at).toLocaleDateString('en-US'),
+                  r.referred_by,
+                  r.prospect,
+                  r.phone || '',
+                  r.status,
+                  r.assigned_to_name || '',
+                  r.follow_up_date || '',
+                  r.notes || '',
+                ])
+                exportCSV('referrals.csv', ['Date','Referred By','Prospect','Phone','Status','Assigned To','Follow-up Date','Notes'], rows)
+              }}>
+                ⬇ Export CSV
+              </Btn>
+            )}
+          </div>
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'1fr 190px', gap:12 }}>
