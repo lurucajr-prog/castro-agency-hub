@@ -4,9 +4,9 @@ import { N, R, Card, Btn, Field, Modal, Spinner, IS, SkeletonCard } from './shar
 import { launchConfetti } from '../utils/animations'
 
 const PODIUM_COLORS = [
-  { bg: '#EAF3DE', tx: '#27500A', border: '#C0DD97' },
-  { bg: '#E6F1FB', tx: '#0C447C', border: '#B5D4F4' },
-  { bg: '#FAEEDA', tx: '#633806', border: '#FAC775' },
+  { bg: 'linear-gradient(135deg, #fef9c3, #fde68a)', tx: '#78350f', border: '#fbbf24', medal: '🥇' },
+  { bg: 'linear-gradient(135deg, #f1f5f9, #e2e8f0)', tx: '#334155', border: '#94a3b8', medal: '🥈' },
+  { bg: 'linear-gradient(135deg, #fff7ed, #fed7aa)', tx: '#7c2d12', border: '#f97316', medal: '🥉' },
 ]
 
 // ── Business day helpers ──────────────────────────────────────
@@ -515,24 +515,44 @@ export default function Dashboard({ user, setPage }) {
         </div>
       )}
 
-      {/* ── Stat cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
+      {/* ── Stat cards — redesigned ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 14 }}>
         {stats.map(s => (
-          <div key={s.label} style={{ background: s.bg, borderRadius: 10, padding: '12px 14px' }}>
-            <div style={{ fontSize: 10, color: s.tx, fontWeight: 500, opacity: 0.7, marginBottom: 3 }}>{s.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 500, color: s.tx, lineHeight: 1, marginBottom: 2 }}>{s.val}</div>
-            <div style={{ fontSize: 10, color: s.tx, opacity: 0.65, marginBottom: s.sub2 || s.pct !== null ? 4 : 0 }}>
+          <div key={s.label} style={{
+            background:   'var(--surface)',
+            borderRadius: 14,
+            padding:      '16px 18px',
+            boxShadow:    'var(--shadow-sm)',
+            border:       '1px solid var(--border)',
+            borderTop:    `3px solid ${s.bar}`,
+            transition:   'box-shadow 0.2s, transform 0.2s',
+            position:     'relative',
+            overflow:     'hidden',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.boxShadow = 'var(--shadow-md)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; e.currentTarget.style.transform = 'none' }}
+          >
+            {/* Background tint */}
+            <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: s.bg, opacity: 0.35, borderRadius: '0 14px 0 80px' }} />
+
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
+              {s.label}
+            </div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-1)', lineHeight: 1, letterSpacing: -1, marginBottom: 6 }}>
+              {s.val}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: s.sub2 ? 5 : s.pct !== null ? 8 : 0, display: 'flex', alignItems: 'center', gap: 5 }}>
               {s.sub}
-              <TrendBadge pct={s.trend} tx={s.tx} />
+              <TrendBadge pct={s.trend} tx={s.bar} />
             </div>
             {s.sub2 && (
-              <div style={{ fontSize: 10, fontWeight: 600, color: s.tx, background: 'rgba(0,0,0,0.09)', borderRadius: 5, padding: '2px 6px', display: 'inline-block', marginBottom: 5 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: s.tx, background: s.bg, borderRadius: 6, padding: '3px 8px', display: 'inline-block', marginBottom: 8 }}>
                 {s.sub2}
               </div>
             )}
             {s.pct !== null && (
-              <div style={{ height: 3, background: 'rgba(0,0,0,.1)', borderRadius: 99 }}>
-                <div style={{ width: s.pct + '%', height: '100%', background: s.bar, borderRadius: 99, transition: 'width 0.5s ease' }} />
+              <div style={{ height: 4, background: 'var(--surface-3)', borderRadius: 99, overflow: 'hidden' }}>
+                <div style={{ width: s.pct + '%', height: '100%', background: s.bar, borderRadius: 99, transition: 'width 0.6s ease' }} />
               </div>
             )}
           </div>
@@ -541,45 +561,52 @@ export default function Dashboard({ user, setPage }) {
 
       {/* ── Goal countdown + pace to close ── */}
       {teamGoal > 0 && (
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Monthly goal</span>
-              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>${totalPrem.toLocaleString()} of ${teamGoal.toLocaleString()}</span>
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '16px 20px', marginBottom: 14, boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>Team goal</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: premPct >= 100 ? 'var(--success)' : 'var(--text-1)', letterSpacing: -0.5 }}>${totalPrem.toLocaleString()}</span>
+              <span style={{ fontSize: 13, color: 'var(--text-4)' }}>of ${teamGoal.toLocaleString()}</span>
             </div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
               {projectedPremium > 0 && (
-                <span style={{ fontSize: 11, color: projectedPremium >= teamGoal ? 'var(--success)' : 'var(--warning)', fontWeight: 500 }}>
-                  At current pace: ${projectedPremium.toLocaleString()} by month end
-                </span>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 1 }}>Pace to close</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: projectedPremium >= teamGoal ? 'var(--success)' : 'var(--warning)' }}>
+                    ${projectedPremium.toLocaleString()}
+                    <span style={{ fontSize: 10, fontWeight: 400, color: 'var(--text-4)', marginLeft: 3 }}>by month end</span>
+                  </div>
+                </div>
               )}
-              <span style={{ fontSize: 11, fontWeight: 600, color: premPct >= 100 ? 'var(--success)' : 'var(--text-3)' }}>{premPct}%</span>
+              <div style={{ background: premPct >= 100 ? 'var(--success-light)' : premPct >= expectedPct ? '#eff6ff' : 'var(--warning-light)', border: `1px solid ${premPct >= 100 ? '#86efac' : premPct >= expectedPct ? '#bfdbfe' : '#fcd34d'}`, borderRadius: 9999, padding: '4px 12px', fontSize: 13, fontWeight: 700, color: premPct >= 100 ? 'var(--success)' : premPct >= expectedPct ? 'var(--primary)' : 'var(--warning)' }}>
+                {premPct}%
+              </div>
             </div>
           </div>
-          {/* Animated progress bar */}
-          <div style={{ height: 10, background: 'var(--surface-3)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}>
-            {/* Expected pace marker */}
+
+          {/* Progress bar */}
+          <div style={{ height: 10, background: 'var(--surface-3)', borderRadius: 99, overflow: 'visible', position: 'relative' }}>
             {expectedPct > 0 && expectedPct < 100 && (
-              <div style={{ position: 'absolute', top: 0, bottom: 0, left: expectedPct + '%', width: 2, background: 'var(--border-2)', zIndex: 2 }} title={`Expected: ${expectedPct}%`} />
+              <div style={{ position: 'absolute', top: -3, bottom: -3, left: `${expectedPct}%`, width: 2, background: 'var(--border-2)', borderRadius: 99, zIndex: 2 }} title={`Expected: ${expectedPct}%`} />
             )}
             <div style={{
               height: '100%',
-              width: Math.min(100, premPct) + '%',
+              width:  Math.min(100, premPct) + '%',
               background: premPct >= 100
-                ? 'var(--success)'
+                ? 'linear-gradient(90deg, #16a34a, #4ade80)'
                 : premPct >= expectedPct
-                  ? 'linear-gradient(90deg, #639922, #16a34a)'
-                  : 'linear-gradient(90deg, #d97706, #f59e0b)',
+                  ? 'linear-gradient(90deg, #2563eb, #60a5fa)'
+                  : 'linear-gradient(90deg, #d97706, #fbbf24)',
               borderRadius: 99,
-              transition: 'width 0.8s ease',
+              transition:   'width 0.8s cubic-bezier(0.34,1.56,0.64,1)',
+              position:     'relative',
             }} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
             <span style={{ fontSize: 10, color: 'var(--text-4)' }}>$0</span>
-            {expectedPct > 0 && expectedPct < 100 && (
-              <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: expectedPct - 10 + '%' }}>
-                ↑ pace
-              </span>
+            {expectedPct > 5 && expectedPct < 95 && (
+              <span style={{ fontSize: 10, color: 'var(--text-4)' }}>Expected {expectedPct}% · {bizElapsed}d of {bizTotal} business days</span>
             )}
             <span style={{ fontSize: 10, color: 'var(--text-4)' }}>${teamGoal.toLocaleString()}</span>
           </div>
@@ -673,21 +700,33 @@ export default function Dashboard({ user, setPage }) {
             </div>
           </div>
 
-          {/* Podium top 3 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 10 }}>
+          {/* Podium top 3 — premium upgrade */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 12 }}>
             {lbData.slice(0, 3).map((item, i) => {
-              const c       = PODIUM_COLORS[i]
-              const isMe    = item.m.id === user.id
+              const c    = PODIUM_COLORS[i]
+              const isMe = item.m.id === user.id
               return (
-                <div key={item.m.id} style={{ background: c.bg, border: `0.5px solid ${c.border}`, borderRadius: 9, padding: '10px', textAlign: 'center', position: 'relative' }}>
+                <div key={item.m.id} style={{
+                  background:   c.bg,
+                  border:       `1.5px solid ${c.border}`,
+                  borderRadius: 14,
+                  padding:      i === 0 ? '16px 12px' : '13px 12px',
+                  textAlign:    'center',
+                  position:     'relative',
+                  boxShadow:    i === 0 ? '0 4px 16px rgba(251,191,36,0.25)' : 'var(--shadow-xs)',
+                  transition:   'transform 0.2s',
+                }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                >
                   {isMe && (
-                    <div style={{ position: 'absolute', top: 5, right: 6, fontSize: 9, fontWeight: 700, color: c.tx, background: 'rgba(0,0,0,0.08)', padding: '1px 5px', borderRadius: 99 }}>YOU</div>
+                    <div style={{ position: 'absolute', top: 7, right: 8, fontSize: 9, fontWeight: 700, color: c.tx, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 99 }}>YOU</div>
                   )}
-                  <div style={{ fontSize: 18, marginBottom: 4 }}>{['🥇', '🥈', '🥉'][i]}</div>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(0,0,0,.08)', margin: '0 auto 5px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 600, color: c.tx }}>{item.m.ini}</div>
-                  <div style={{ fontSize: 11, fontWeight: 500, color: c.tx }}>{item.m.name}</div>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: c.tx, marginTop: 2 }}>${item.prem.toLocaleString()}</div>
-                  {item.streak > 0 && <div style={{ fontSize: 10, color: c.tx, opacity: 0.75, marginTop: 2 }}>🔥 {item.streak}d</div>}
+                  <div style={{ fontSize: i === 0 ? 26 : 22, marginBottom: 8 }}>{c.medal}</div>
+                  <div style={{ width: i === 0 ? 38 : 32, height: i === 0 ? 38 : 32, borderRadius: '50%', background: 'rgba(0,0,0,0.1)', margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: i === 0 ? 12 : 10, fontWeight: 700, color: c.tx }}>{item.m.ini}</div>
+                  <div style={{ fontSize: i === 0 ? 13 : 11, fontWeight: 700, color: c.tx, marginBottom: 3 }}>{item.m.name}</div>
+                  <div style={{ fontSize: i === 0 ? 16 : 14, fontWeight: 800, color: c.tx, letterSpacing: -0.5 }}>${item.prem.toLocaleString()}</div>
+                  {item.streak > 0 && <div style={{ fontSize: 10, color: c.tx, opacity: 0.8, marginTop: 4 }}>🔥 {item.streak}d</div>}
                 </div>
               )
             })}
@@ -697,15 +736,15 @@ export default function Dashboard({ user, setPage }) {
           {lbData.slice(3).map((item, i) => {
             const isMe = item.m.id === user.id
             return (
-              <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 9, borderTop: '0.5px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent', padding: isMe ? '6px 14px' : '6px 0' }}>
-                <span style={{ fontSize: 12, color: 'var(--text-4)', width: 20 }}>{i + 4}.</span>
-                <div style={{ width: 24, height: 24, borderRadius: '50%', background: isMe ? 'var(--primary)' : 'var(--primary-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 600, color: isMe ? '#fff' : '#1e40af', flexShrink: 0 }}>{item.m.ini}</div>
-                <span style={{ fontSize: 12, flex: 1, color: 'var(--text-1)', fontWeight: isMe ? 600 : 400 }}>
+              <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent', padding: isMe ? '8px 12px' : '8px 2px', borderRadius: isMe ? 8 : 0, margin: isMe ? '0 -2px' : 0 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-4)', width: 18, fontWeight: 600 }}>{i + 4}.</span>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: isMe ? 'var(--primary)' : 'var(--primary-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: isMe ? '#fff' : '#1e40af', flexShrink: 0 }}>{item.m.ini}</div>
+                <span style={{ fontSize: 13, flex: 1, color: 'var(--text-1)', fontWeight: isMe ? 700 : 400 }}>
                   {item.m.name}
-                  {isMe && <span style={{ fontSize: 9, color: 'var(--primary)', fontWeight: 700, marginLeft: 5 }}>YOU</span>}
+                  {isMe && <span style={{ fontSize: 9, color: 'var(--primary)', fontWeight: 700, marginLeft: 6 }}>YOU</span>}
                 </span>
-                {item.streak > 0 && <span style={{ fontSize: 11, color: '#d97706' }}>🔥{item.streak}</span>}
-                <span style={{ fontSize: 12, fontWeight: 500, color: item.prem > 0 ? '#0C447C' : 'var(--text-4)' }}>${item.prem.toLocaleString()}</span>
+                {item.streak > 0 && <span style={{ fontSize: 11, color: '#d97706' }}>🔥 {item.streak}</span>}
+                <span style={{ fontSize: 13, fontWeight: 700, color: item.prem > 0 ? 'var(--text-1)' : 'var(--text-4)' }}>${item.prem.toLocaleString()}</span>
               </div>
             )
           })}
