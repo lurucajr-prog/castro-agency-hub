@@ -108,8 +108,20 @@ export default function SavingsCalculator({ onClose }) {
   const bigSavings = c.totalSavYear || 0
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,29,53,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: 20 }}>
-      <div style={{ background: 'var(--surface)', borderRadius: 16, width: 580, maxWidth: '96vw', maxHeight: '92vh', overflow: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.3)' }}>
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: 'rgba(15,29,53,0.55)',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      zIndex: 2000,
+      overflowY: 'auto',
+      padding: '32px 20px 40px',
+    }}>
+      <div style={{
+        background: 'var(--surface)', borderRadius: 16,
+        width: 580, maxWidth: '96vw',
+        boxShadow: '0 24px 80px rgba(0,0,0,0.3)',
+        flexShrink: 0,
+      }}>
 
         {/* ── Header ── */}
         <div style={{ background: N, borderRadius: '16px 16px 0 0', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
