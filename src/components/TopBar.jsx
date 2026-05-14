@@ -43,6 +43,16 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, payload => {
         if (payload.new.to_uid === user.id) {
           setNotifications(prev => [payload.new, ...prev])
+          setUnreadNotifs(c => c + 1)
+          // Trigger browser push if permission granted
+          if ('Notification' in window && Notification.permission === 'granted') {
+            const n = payload.new
+            new Notification(n.title || 'Castro Agency Hub', {
+              body:  n.body  || '',
+              icon:  '/favicon.ico',
+              tag:   `notif-${n.id}`,
+            })
+          }
         }
       })
       .subscribe()
