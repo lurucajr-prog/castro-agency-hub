@@ -132,7 +132,8 @@ export default function Tasks({ user }) {
         display: 'flex', alignItems: 'flex-start', gap: 9, padding: '9px 0',
         borderBottom: '1px solid var(--border)',
         background: isOverdue ? 'var(--danger-light)' : 'transparent',
-        margin: isOverdue ? '0 -15px', padding: isOverdue ? '9px 15px' : '9px 0',
+        margin: isOverdue ? '0 -15px' : undefined,
+        padding: isOverdue ? '9px 15px' : '9px 0',
       }}>
         <div
           onClick={() => toggleTask(t.id, t.done)}
