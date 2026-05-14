@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { N, R, Card, Btn, Field, Modal, Spinner, IS } from './shared'
+import { N, R, Card, Btn, Field, Modal, Spinner, IS, SkeletonCard } from './shared'
 import { launchConfetti } from '../utils/animations'
 
 const PODIUM_COLORS = [
@@ -153,6 +153,7 @@ export default function Dashboard({ user, setPage }) {
   const [teamGoal,           setTeamGoal]           = useState(50000)
   const [lastMonthPrem,      setLastMonthPrem]      = useState(0)
   const [lastMonthItems,     setLastMonthItems]     = useState(0)
+  const [adminStats,         setAdminStats]         = useState(null)
 
   const goalCelebrated = useRef(false)
   const isAdmin = user.role === 'admin'
@@ -228,6 +229,21 @@ export default function Dashboard({ user, setPage }) {
       goals: goals.data || [],
     })
     setLoading(false)
+
+    // Admin-only: fetch quick stats for the summary section
+    if (user.role === 'admin') {
+      const today = new Date().toISOString().split('T')[0]
+      const [sugg, leadRets, refFollowUp] = await Promise.all([
+        supabase.from('suggestions').select('*', { count:'exact', head:true }).eq('status', 'Pending'),
+        supabase.from('lead_returns').select('*', { count:'exact', head:true }).eq('status', 'New'),
+        supabase.from('referrals').select('*', { count:'exact', head:true }).lte('follow_up_date', today).not('status', 'in', '("Sold","Not Interested")').not('follow_up_date', 'is', null),
+      ])
+      setAdminStats({
+        pendingSuggestions: sugg.count  || 0,
+        newLeadReturns:     leadRets.count || 0,
+        followUpDue:        refFollowUp.count || 0,
+      })
+    }
   }
 
   // ── Goal confetti trigger ─────────────────────────────────────
@@ -293,7 +309,20 @@ export default function Dashboard({ user, setPage }) {
     setStandupEnabled(n)
   }
 
-  if (loading) return <Spinner />
+  if (loading) return (
+    <div style={{ padding:22 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10, marginBottom:14 }}>
+        {[1,2,3,4].map(i => <SkeletonCard key={i} lines={3} />)}
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'1.35fr 1fr', gap:12 }}>
+        <SkeletonCard lines={6} />
+        <div style={{ display:'flex', flexDirection:'column', gap:11 }}>
+          <SkeletonCard lines={4} />
+          <SkeletonCard lines={3} />
+        </div>
+      </div>
+    </div>
+  )
 
   const { tasks, monthSales, allSales, revs, profiles, goals } = data
   const members   = profiles.filter(p => p.role === 'member')
@@ -415,6 +444,34 @@ export default function Dashboard({ user, setPage }) {
           )}
         </div>
       </div>
+
+      {/* ── Admin summary section ── */}
+      {isAdmin && adminStats && (
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:11, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:0.5, marginBottom:8 }}>
+            Quick overview
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
+            {[
+              { label:'Pending suggestions', val:adminStats.pendingSuggestions, page:'suggestions', icon:'💡', warn: adminStats.pendingSuggestions > 0 },
+              { label:'Overdue tasks',        val:tasks.filter(t=>!t.done).length, page:'tasks',       icon:'☑', warn: false },
+              { label:'Follow-ups due',       val:adminStats.followUpDue,          page:'referrals',   icon:'📅', warn: adminStats.followUpDue > 0 },
+              { label:'Unresolved lead returns', val:adminStats.newLeadReturns,   page:'sales',       icon:'↩', warn: adminStats.newLeadReturns > 0 },
+            ].map(s => (
+              <div key={s.label} onClick={() => setPage(s.page)}
+                style={{ background: s.warn && s.val > 0 ? 'var(--warning-light)' : 'var(--surface)', border: `1px solid ${s.warn && s.val > 0 ? '#fcd34d' : 'var(--border)'}`, borderRadius:10, padding:'11px 14px', cursor:'pointer', transition:'box-shadow 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.boxShadow = 'var(--shadow-sm)'}
+                onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
+                  <span style={{ fontSize:14 }}>{s.icon}</span>
+                  <div style={{ fontSize:10, color:'var(--text-4)', fontWeight:500, textTransform:'uppercase', letterSpacing:0.4 }}>{s.label}</div>
+                </div>
+                <div style={{ fontSize:22, fontWeight:700, color: s.warn && s.val > 0 ? '#92400e' : 'var(--text-1)' }}>{s.val}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Stat cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 14 }}>
