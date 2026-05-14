@@ -438,7 +438,7 @@ export default function Dashboard({ user, setPage }) {
       val:   revs.length,
       sub:   revDone + ' left a review · ' + (revs.length ? Math.round(revDone / revs.length * 100) : 0) + '% conversion',
       pct:   revs.length ? Math.round(revDone / revs.length * 100) : 0,
-      bg:    '#FAEEDA', tx: '#633806', bar: '#BA7517',
+      bg:    '#FAEEDA', tx: '#7c2d12', bar: '#c2410c',
       trend: null,
     },
   ]
@@ -532,8 +532,8 @@ export default function Dashboard({ user, setPage }) {
             onMouseEnter={e => { e.currentTarget.style.boxShadow = 'var(--shadow-md)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
             onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; e.currentTarget.style.transform = 'none' }}
           >
-            {/* Background tint */}
-            <div style={{ position: 'absolute', top: 0, right: 0, width: 80, height: 80, background: s.bg, opacity: 0.35, borderRadius: '0 14px 0 80px' }} />
+            {/* Background tint -- stronger corner accent */}
+            <div style={{ position: 'absolute', top: 0, right: 0, width: 96, height: 96, background: s.bg, opacity: 0.6, borderRadius: '0 14px 0 96px', pointerEvents: 'none' }} />
 
             <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
               {s.label}
@@ -701,50 +701,60 @@ export default function Dashboard({ user, setPage }) {
           </div>
 
           {/* Podium top 3 — premium upgrade */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14, alignItems: 'flex-end' }}>
             {lbData.slice(0, 3).map((item, i) => {
-              const c    = PODIUM_COLORS[i]
-              const isMe = item.m.id === user.id
+              const c     = PODIUM_COLORS[i]
+              const isMe  = item.m.id === user.id
+              const minH  = [200, 165, 145][i]
               return (
                 <div key={item.m.id} style={{
-                  background:   c.bg,
-                  border:       `1.5px solid ${c.border}`,
-                  borderRadius: 14,
-                  padding:      i === 0 ? '16px 12px' : '13px 12px',
-                  textAlign:    'center',
-                  position:     'relative',
-                  boxShadow:    i === 0 ? '0 4px 16px rgba(251,191,36,0.25)' : 'var(--shadow-xs)',
-                  transition:   'transform 0.2s',
+                  background:     c.bg,
+                  border:         `1.5px solid ${c.border}`,
+                  borderRadius:   14,
+                  padding:        i === 0 ? '22px 12px 18px' : i === 1 ? '16px 12px' : '12px',
+                  minHeight:      minH,
+                  textAlign:      'center',
+                  position:       'relative',
+                  boxShadow:      i === 0 ? '0 8px 28px rgba(251,191,36,0.35), 0 2px 8px rgba(251,191,36,0.15)' : 'var(--shadow-xs)',
+                  transition:     'transform 0.2s, box-shadow 0.2s',
+                  display:        'flex',
+                  flexDirection:  'column',
+                  alignItems:     'center',
+                  justifyContent: 'center',
+                  gap:            i === 0 ? 6 : 4,
                 }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'none'}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; if (i === 0) e.currentTarget.style.boxShadow = '0 14px 36px rgba(251,191,36,0.4)' }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; if (i === 0) e.currentTarget.style.boxShadow = '0 8px 28px rgba(251,191,36,0.35), 0 2px 8px rgba(251,191,36,0.15)' }}
                 >
                   {isMe && (
-                    <div style={{ position: 'absolute', top: 7, right: 8, fontSize: 9, fontWeight: 700, color: c.tx, background: 'rgba(0,0,0,0.1)', padding: '2px 6px', borderRadius: 99 }}>YOU</div>
+                    <div style={{ position: 'absolute', top: 8, right: 9, fontSize: 9, fontWeight: 700, color: c.tx, background: 'rgba(0,0,0,0.12)', padding: '2px 7px', borderRadius: 99 }}>YOU</div>
                   )}
-                  <div style={{ fontSize: i === 0 ? 26 : 22, marginBottom: 8 }}>{c.medal}</div>
-                  <div style={{ width: i === 0 ? 38 : 32, height: i === 0 ? 38 : 32, borderRadius: '50%', background: 'rgba(0,0,0,0.1)', margin: '0 auto 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: i === 0 ? 12 : 10, fontWeight: 700, color: c.tx }}>{item.m.ini}</div>
-                  <div style={{ fontSize: i === 0 ? 13 : 11, fontWeight: 700, color: c.tx, marginBottom: 3 }}>{item.m.name}</div>
-                  <div style={{ fontSize: i === 0 ? 16 : 14, fontWeight: 800, color: c.tx, letterSpacing: -0.5 }}>${item.prem.toLocaleString()}</div>
-                  {item.streak > 0 && <div style={{ fontSize: 10, color: c.tx, opacity: 0.8, marginTop: 4 }}>🔥 {item.streak}d</div>}
+                  <div style={{ fontSize: i === 0 ? 32 : 22 }}>{c.medal}</div>
+                  <div style={{ width: i === 0 ? 44 : 33, height: i === 0 ? 44 : 33, borderRadius: '50%', background: 'rgba(0,0,0,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: i === 0 ? 14 : 11, fontWeight: 700, color: c.tx }}>{item.m.ini}</div>
+                  <div style={{ fontSize: i === 0 ? 14 : 12, fontWeight: 700, color: c.tx }}>{item.m.name}</div>
+                  <div style={{ fontSize: i === 0 ? 20 : 15, fontWeight: 800, color: c.tx, letterSpacing: -0.5 }}>${item.prem.toLocaleString()}</div>
+                  {item.streak > 0 && <div style={{ fontSize: 11, color: c.tx, opacity: 0.85 }}>🔥 {item.streak}d</div>}
                 </div>
               )
             })}
           </div>
 
-          {/* Remaining agents */}
+          {/* Remaining agents — bridged styling */}
           {lbData.slice(3).map((item, i) => {
             const isMe = item.m.id === user.id
             return (
-              <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent', padding: isMe ? '8px 12px' : '8px 2px', borderRadius: isMe ? 8 : 0, margin: isMe ? '0 -2px' : 0 }}>
-                <span style={{ fontSize: 12, color: 'var(--text-4)', width: 18, fontWeight: 600 }}>{i + 4}.</span>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: isMe ? 'var(--primary)' : 'var(--primary-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: isMe ? '#fff' : '#1e40af', flexShrink: 0 }}>{item.m.ini}</div>
-                <span style={{ fontSize: 13, flex: 1, color: 'var(--text-1)', fontWeight: isMe ? 700 : 400 }}>
+              <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border)', background: isMe ? 'var(--primary-light)' : i % 2 === 0 ? 'transparent' : 'var(--surface-2)', padding: '9px 10px', borderRadius: isMe ? 8 : 0, margin: isMe ? '0 -2px' : 0, transition: 'background 0.15s' }}
+                onMouseEnter={e => { if (!isMe) e.currentTarget.style.background = 'var(--surface-2)' }}
+                onMouseLeave={e => { if (!isMe) e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'var(--surface-2)' }}
+              >
+                <span style={{ fontSize: 12, color: 'var(--text-4)', width: 18, fontWeight: 600, textAlign: 'center' }}>{i + 4}</span>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: isMe ? 'var(--primary)' : 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: isMe ? '#fff' : 'var(--text-2)', flexShrink: 0 }}>{item.m.ini}</div>
+                <span style={{ fontSize: 13, flex: 1, color: 'var(--text-1)', fontWeight: isMe ? 700 : 500 }}>
                   {item.m.name}
                   {isMe && <span style={{ fontSize: 9, color: 'var(--primary)', fontWeight: 700, marginLeft: 6 }}>YOU</span>}
                 </span>
-                {item.streak > 0 && <span style={{ fontSize: 11, color: '#d97706' }}>🔥 {item.streak}</span>}
-                <span style={{ fontSize: 13, fontWeight: 700, color: item.prem > 0 ? 'var(--text-1)' : 'var(--text-4)' }}>${item.prem.toLocaleString()}</span>
+                {item.streak > 0 && <span style={{ fontSize: 11, color: '#d97706', fontWeight: 600 }}>🔥 {item.streak}</span>}
+                <span style={{ fontSize: 13, fontWeight: 700, color: item.prem > 0 ? 'var(--success)' : 'var(--text-4)' }}>${item.prem.toLocaleString()}</span>
               </div>
             )
           })}
@@ -851,8 +861,8 @@ export default function Dashboard({ user, setPage }) {
                         <div style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.4 }}>
                           <span style={{ fontWeight: 600 }}>{profile?.name || 'Someone'}</span>
                           {isSale
-                            ? <> logged a sale — {item.policy_type} · <span style={{ color: 'var(--success)', fontWeight: 500 }}>${(item.premium || 0).toLocaleString()}</span>{item.is_split && <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: 4 }}>(split)</span>}</>
-                            : <> · <span style={{ fontWeight: 500 }}>{item.client}</span> left a review</>
+                            ? <> logged a sale — {item.policy_type} · <span style={{ color: 'var(--success)', fontWeight: 700 }}>${(item.premium || 0).toLocaleString()}</span>{item.is_split && <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: 4 }}>(split)</span>}</>
+                            : <> · <span style={{ fontWeight: 600 }}>{item.client}</span> left a review</>
                           }
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>{timeAgo}</div>
