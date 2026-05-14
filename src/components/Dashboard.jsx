@@ -331,7 +331,8 @@ export default function Dashboard({ user, setPage }) {
   const totalPrem     = monthSales.reduce((s, x) => s + (x.premium || 0), 0)
   const totalItems    = monthSales.reduce((s, x) => s + (x.items || 1), 0)
   const totalPremGoal = members.reduce((sum, m) => sum + (goalsMap[m.id]?.premium || 10000), 0)
-  const premPct       = totalPremGoal ? Math.min(100, Math.round(totalPrem / totalPremGoal * 100)) : 0
+  // premPct uses the team goal from settings so the stat card, pacing badge, and goal confetti all agree
+  const premPct       = teamGoal > 0 ? Math.min(100, Math.round(totalPrem / teamGoal * 100)) : 0
 
   const myTasks      = tasks.filter(t => t.uid === user.id)
   const myMonthSales = monthSales.filter(s => s.uid === user.id)
