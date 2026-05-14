@@ -46,6 +46,11 @@ export default function Profiles({ user, setPage, openDm }) {
   const [uploading,       setUploading]       = useState(false)
   const [activityFeed,    setActivityFeed]    = useState([])
   const [loadingActivity, setLoadingActivity] = useState(false)
+  const [shoutouts,       setShoutouts]       = useState([])      // all active shoutouts
+  const [showShoutout,    setShowShoutout]    = useState(null)    // profile to shout out
+  const [shoutMsg,        setShoutMsg]        = useState('')
+  const [shoutEmoji,      setShoutEmoji]      = useState('🏅')
+  const [sendingShout,    setSendingShout]    = useState(false)
   const fileRef = useRef(null)
 
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
@@ -59,17 +64,19 @@ export default function Profiles({ user, setPage, openDm }) {
   }, [selected?.id])
 
   async function fetchAll() {
-    const [p, allS, mS, r] = await Promise.all([
+    const [p, allS, mS, r, sh] = await Promise.all([
       supabase.from('profiles').select('*'),
       supabase.from('sales').select('uid, created_at, premium, client, policy_type'),
       supabase.from('sales').select('uid, premium').gte('created_at', monthStart),
       supabase.from('reviews').select('asked_by_uid, client, result, created_at'),
+      supabase.from('shoutouts').select('*').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }),
     ])
     const profileData = p.data || []
     setProfiles(profileData)
     setAllSales(allS.data || [])
     setMonthSales(mS.data || [])
     setReviews(r.data || [])
+    setShoutouts(sh.data || [])
     setLoading(false)
 
     // Persist any newly earned badges for the current user
@@ -139,6 +146,27 @@ export default function Profiles({ user, setPage, openDm }) {
     }
   }
 
+  async function sendShoutout() {
+    if (!shoutMsg.trim() || !showShoutout) return
+    setSendingShout(true)
+    const expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
+    const toProfile = profiles.find(p => p.id === showShoutout)
+    const { data } = await supabase.from('shoutouts').insert({
+      from_uid:   user.id,
+      from_name:  user.name,
+      to_uid:     showShoutout,
+      to_name:    toProfile?.name || '',
+      message:    shoutMsg.trim(),
+      emoji:      shoutEmoji,
+      expires_at: expiresAt,
+    }).select().single()
+    if (data) setShoutouts(prev => [data, ...prev])
+    setShowShoutout(null)
+    setShoutMsg('')
+    setShoutEmoji('🏅')
+    setSendingShout(false)
+  }
+
   if (loading) return <Spinner />
 
   const members = profiles.filter(p => p.role === 'member')
@@ -204,13 +232,28 @@ export default function Profiles({ user, setPage, openDm }) {
 
                 {/* DM button -- only shown on other people's cards */}
                 {p.id !== user.id && (
-                  <button
-                    onClick={e => { e.stopPropagation(); handleDm(p.id) }}
-                    style={{ fontSize: 11, color: N, background: 'var(--primary-light)', border: `1px solid var(--primary-mid)`, borderRadius: 6, padding: '5px 0', cursor: 'pointer', width: '100%', marginTop: 2, fontFamily: 'inherit' }}
-                  >
-                    💬 Send DM
-                  </button>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDm(p.id) }}
+                      style={{ flex: 1, fontSize: 11, color: N, background: 'var(--primary-light)', border: `1px solid var(--primary-mid)`, borderRadius: 6, padding: '5px 0', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      💬 DM
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setShowShoutout(p.id); setShoutMsg(''); setShoutEmoji('🏅') }}
+                      style={{ flex: 1, fontSize: 11, color: '#92400e', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 6, padding: '5px 0', cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      🏅 Shoutout
+                    </button>
+                  </div>
                 )}
+
+                {/* Active shoutouts for this person */}
+                {shoutouts.filter(s => s.to_uid === p.id).slice(0, 1).map(s => (
+                  <div key={s.id} style={{ marginTop: 6, background: '#fef9c3', border: '1px solid #fcd34d', borderRadius: 7, padding: '5px 8px', fontSize: 10, color: '#78350f', lineHeight: 1.4 }}>
+                    {s.emoji} <em>"{s.message}"</em> — {s.from_name}
+                  </div>
+                ))}
               </div>
             )
           })}
@@ -354,6 +397,74 @@ export default function Profiles({ user, setPage, openDm }) {
                 ))}
               </div>
             )}
+
+            {/* Shoutouts for this person */}
+            {(() => {
+              const myShouts = shoutouts.filter(s => s.to_uid === selected?.id)
+              if (myShouts.length === 0) return null
+              return (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
+                    Shoutouts
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {myShouts.map(s => (
+                      <div key={s.id} style={{ background: '#fef9c3', border: '1px solid #fcd34d', borderRadius: 8, padding: '9px 12px' }}>
+                        <div style={{ fontSize: 13, color: '#78350f', marginBottom: 2 }}>{s.emoji} <em>"{s.message}"</em></div>
+                        <div style={{ fontSize: 11, color: '#92400e' }}>From {s.from_name} · expires in {Math.max(0, Math.ceil((new Date(s.expires_at) - Date.now()) / 86400000))}d</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Send shoutout button in modal */}
+            {selected?.id !== user.id && (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                <button
+                  onClick={() => { setShowShoutout(selected.id); setShoutMsg(''); setShoutEmoji('🏅') }}
+                  style={{ fontSize: 12, fontWeight: 500, color: '#92400e', background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  🏅 Send {selected?.name?.split(' ')[0]} a shoutout
+                </button>
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Send shoutout modal */}
+      {showShoutout && (
+        <Modal title={`Shoutout — ${profiles.find(p => p.id === showShoutout)?.name}`} onClose={() => setShowShoutout(null)} width={400}>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 14, lineHeight: 1.5 }}>
+            Shoutouts appear on their profile card for 2 days. Everyone on the team can see them.
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>Pick an emoji</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {['🏅', '⭐', '💪', '🎯', '🔥', '👏', '🚀', '❤️'].map(e => (
+                <button key={e} onClick={() => setShoutEmoji(e)} style={{ fontSize: 22, background: shoutEmoji === e ? 'var(--primary-light)' : 'var(--surface-2)', border: `2px solid ${shoutEmoji === e ? N : 'transparent'}`, borderRadius: 8, padding: '5px 7px', cursor: 'pointer' }}>{e}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>Message</div>
+            <textarea
+              value={shoutMsg}
+              onChange={e => setShoutMsg(e.target.value)}
+              placeholder={`e.g. Great work on that close today!`}
+              rows={3}
+              style={{ width: '100%', border: '1px solid var(--border-2)', borderRadius: 8, padding: '9px 12px', fontSize: 13, resize: 'none', outline: 'none', background: 'var(--surface)', color: 'var(--text-1)', fontFamily: 'inherit', lineHeight: 1.5 }}
+              maxLength={120}
+            />
+            <div style={{ fontSize: 10, color: 'var(--text-4)', textAlign: 'right', marginTop: 2 }}>{shoutMsg.length}/120</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Btn variant="outline" onClick={() => setShowShoutout(null)}>Cancel</Btn>
+            <Btn onClick={sendShoutout} disabled={sendingShout || !shoutMsg.trim()} style={{ background: '#d97706' }}>
+              {sendingShout ? 'Sending…' : `${shoutEmoji} Send shoutout`}
+            </Btn>
           </div>
         </Modal>
       )}
