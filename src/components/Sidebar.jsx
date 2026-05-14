@@ -67,7 +67,7 @@ export default function Sidebar({ user, page, setPage, onLogout, darkMode, toggl
   const w = collapsed ? 52 : 170
 
   return (
-    <div style={{ width:w, minWidth:w, background:N, display:'flex', flexDirection:'column', height:'100vh', transition:'width 0.22s ease, min-width 0.22s ease', position:'relative', flexShrink:0, overflow:'hidden' }}>
+    <div style={{ width:w, minWidth:w, background:N, display:'flex', flexDirection:'column', height:'100vh', transition:'width 0.22s cubic-bezier(0.4,0,0.2,1), min-width 0.22s cubic-bezier(0.4,0,0.2,1)', position:'relative', flexShrink:0, overflow:'hidden', boxShadow:'4px 0 24px rgba(0,0,0,0.2)' }}>
 
       {/* Logo */}
       <div style={{ padding: collapsed ? '14px 0' : '14px 13px 11px', borderBottom:'1px solid rgba(255,255,255,0.08)', textAlign: collapsed ? 'center' : 'left', flexShrink:0 }}>
