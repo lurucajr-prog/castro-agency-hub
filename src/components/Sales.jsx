@@ -59,13 +59,18 @@ function currentMonthKey() {
 }
 
 // ── Sale toast ────────────────────────────────────────────────
-function SaleToast({ client, premium, onDone }) {
+function SaleToast({ client, premium, split, partner, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t) }, [])
   return (
     <div style={{ position:'fixed', top:80, left:'50%', transform:'translateX(-50%)', background:'var(--surface)', border:'2px solid #16a34a', borderRadius:16, padding:'18px 32px', zIndex:9998, textAlign:'center', boxShadow:'var(--shadow-lg)', animation:'toastIn .4s ease', minWidth:260 }}>
       <div style={{ fontSize:40, marginBottom:8 }}>🎉</div>
       <div style={{ fontSize:17, fontWeight:700, color:'#166534', marginBottom:4 }}>Sale logged!</div>
-      <div style={{ fontSize:13, color:'var(--text-2)' }}>{client} · <strong style={{ color:'#166534' }}>${Number(premium).toLocaleString()}</strong></div>
+      <div style={{ fontSize:13, color:'var(--text-2)' }}>
+        {client} · <strong style={{ color:'#166534' }}>${Number(premium).toLocaleString()}</strong>
+      </div>
+      {split && partner && (
+        <div style={{ fontSize:11, color:'var(--text-3)', marginTop:4 }}>Split 50/50 with {partner}</div>
+      )}
     </div>
   )
 }
@@ -138,6 +143,14 @@ export default function Sales({ user }) {
   const [lForm,      setLForm]      = useState({ name:'', phone:'', source:'BP', notes:'' })
   const [saving,     setSaving]     = useState(false)
 
+  // Split sale
+  const [splitSale,      setSplitSale]      = useState(false)
+  const [splitPartnerUid,setSplitPartnerUid] = useState('')
+
+  // All-time leaderboard
+  const [lbView,       setLbView]       = useState('month')  // 'month' | 'alltime'
+  const [allTimeSales, setAllTimeSales] = useState([])
+
   // Edit / delete sale
   const [editingSale,   setEditingSale]   = useState(null)   // sale object
   const [editSaleForm,  setEditSaleForm]  = useState({})
@@ -179,15 +192,17 @@ export default function Sales({ user }) {
 
   // Fetch data that doesn't depend on selected month
   async function fetchStaticData() {
-    const [g, p, l] = await Promise.all([
+    const [g, p, l, allT] = await Promise.all([
       supabase.from('goals').select('*'),
       supabase.from('profiles').select('*'),
       supabase.from('lead_returns').select('*').order('created_at', { ascending:false }),
+      supabase.from('sales').select('uid, premium, items, created_at').order('created_at', { ascending: false }),
     ])
     const gMap = {}; (g.data || []).forEach(x => { gMap[x.uid] = x })
     setGoals(gMap)
     setProfiles(p.data || [])
     setLeads(l.data || [])
+    setAllTimeSales(allT.data || [])
     setLoading(false)
   }
 
@@ -220,18 +235,38 @@ export default function Sales({ user }) {
     setSaving(true)
     const uid       = isAdmin ? sForm.uid : user.id
     const itemCount = Math.max(1, Number(sForm.items) || 1)
-    const { data, error } = await supabase.from('sales')
-      .insert({ uid, client:sForm.client, policy_type:sForm.pt, premium:Number(sForm.premium), items:itemCount })
-      .select().single()
-    if (error) { console.error('[Sales] add error', error); setSaving(false); return }
-    if (data) {
-      setSales(ss => [data, ...ss])
-      launchConfetti()
-      playFanfare()
-      setSaleToast({ client:sForm.client, premium:sForm.premium })
-      await logAudit({ user, action:'INSERT', table:'sales', record_id:data.id, new_data:data })
+    const fullPrem  = Number(sForm.premium)
+
+    if (splitSale && splitPartnerUid && splitPartnerUid !== uid) {
+      // Insert two records at half premium each
+      const halfPrem        = Math.round(fullPrem / 2 * 100) / 100
+      const partnerProfile  = profiles.find(p => p.id === splitPartnerUid)
+      const halfItems       = Math.max(1, Math.ceil(itemCount / 2))
+
+      const [r1, r2] = await Promise.all([
+        supabase.from('sales').insert({ uid, client:sForm.client, policy_type:sForm.pt, premium:halfPrem, items:halfItems, is_split:true, split_partner_uid:splitPartnerUid, split_partner_name:partnerProfile?.name || null }).select().single(),
+        supabase.from('sales').insert({ uid:splitPartnerUid, client:sForm.client, policy_type:sForm.pt, premium:halfPrem, items:halfItems, is_split:true, split_partner_uid:uid, split_partner_name:profiles.find(p=>p.id===uid)?.name || null }).select().single(),
+      ])
+      if (r1.data) { setSales(ss => [r1.data, ...ss]); await logAudit({ user, action:'INSERT', table:'sales', record_id:r1.data.id, new_data:r1.data }) }
+      if (r2.data) { setSales(ss => [r2.data, ...ss]); await logAudit({ user, action:'INSERT', table:'sales', record_id:r2.data.id, new_data:r2.data }) }
+      launchConfetti(); playFanfare()
+      setSaleToast({ client:sForm.client, premium:fullPrem, split:true, partner:partnerProfile?.name })
+    } else {
+      // Normal single sale
+      const { data, error } = await supabase.from('sales')
+        .insert({ uid, client:sForm.client, policy_type:sForm.pt, premium:fullPrem, items:itemCount })
+        .select().single()
+      if (error) { console.error('[Sales] add error', error); setSaving(false); return }
+      if (data) {
+        setSales(ss => [data, ...ss])
+        launchConfetti(); playFanfare()
+        setSaleToast({ client:sForm.client, premium:sForm.premium })
+        await logAudit({ user, action:'INSERT', table:'sales', record_id:data.id, new_data:data })
+      }
     }
+
     setSForm(f => ({ ...f, client:'', premium:'', items:1 }))
+    setSplitSale(false); setSplitPartnerUid('')
     setSaving(false)
   }
 
@@ -287,6 +322,13 @@ export default function Sales({ user }) {
     setConfirmDelete(null)
   }
 
+  // ── Admin leaderboard toggle ──────────────────────────────────
+  async function toggleAdminLeaderboard(admin) {
+    const next = !admin.show_on_leaderboard
+    await supabase.from('profiles').update({ show_on_leaderboard: next }).eq('id', admin.id)
+    setProfiles(ps => ps.map(p => p.id === admin.id ? { ...p, show_on_leaderboard: next } : p))
+  }
+
   // ── Goals ─────────────────────────────────────────────────────
   async function saveGoal() {
     if (!editGoal) return
@@ -311,8 +353,11 @@ export default function Sales({ user }) {
 
   const members = profiles.filter(p => p.role === 'member')
 
+  // Leaderboard participants: agents + any admins who toggled themselves on
+  const lbParticipants = profiles.filter(p => p.role === 'member' || (p.role === 'admin' && p.show_on_leaderboard))
+
   // Leaderboard data
-  const lbData = members.map(m => {
+  const lbData = lbParticipants.map(m => {
     const ms     = sales.filter(s => s.uid === m.id)
     const ma     = acts.filter(a => a.uid === m.id)
     const items  = ms.reduce((s, x) => s + (x.items || 1), 0)
@@ -411,8 +456,37 @@ export default function Sales({ user }) {
               />
             )}
 
-            <Card p={0}>
-              {lbData.length === 0 ? <EmptyState text="No sales data for this month." icon="📊" /> : (
+            {/* Admin leaderboard visibility toggles -- admin eyes only */}
+            {isAdmin && (
+              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:10, padding:'8px 12px', background:'var(--surface-2)', borderRadius:8, border:'1px solid var(--border)' }}>
+                <span style={{ fontSize:11, color:'var(--text-4)', fontWeight:500 }}>Include on leaderboard:</span>
+                {profiles.filter(p => p.role === 'admin').map(a => (
+                  <label key={a.id} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!a.show_on_leaderboard}
+                      onChange={() => toggleAdminLeaderboard(a)}
+                      style={{ width:14, height:14, cursor:'pointer', accentColor:N }}
+                    />
+                    <span style={{ fontSize:12, fontWeight:500, color:'var(--text-2)' }}>{a.name}</span>
+                  </label>
+                ))}
+                <span style={{ fontSize:10, color:'var(--text-4)', marginLeft:'auto', fontStyle:'italic' }}>Visible to everyone</span>
+              </div>
+            )}
+
+            {/* Month / All-time sub-tabs */}
+            <div style={{ display:'flex', gap:6, marginBottom:12 }}>
+              {['month', 'alltime'].map(v => (
+                <button key={v} onClick={() => setLbView(v)} style={{ padding:'5px 14px', borderRadius:7, border:`1px solid ${lbView===v ? N : 'var(--border)'}`, background: lbView===v ? N : 'var(--surface)', color: lbView===v ? '#fff' : 'var(--text-3)', fontSize:12, fontWeight: lbView===v ? 600 : 400, cursor:'pointer', fontFamily:'inherit' }}>
+                  {v === 'month' ? 'This month' : 'All-time'}
+                </button>
+              ))}
+            </div>
+
+            {lbView === 'month' ? (
+              <Card p={0}>
+                {lbData.length === 0 ? <EmptyState text="No sales data for this month." icon="📊" /> : (
                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                   <thead>
                     <tr style={{ background:'var(--surface-2)' }}>
@@ -452,6 +526,54 @@ export default function Sales({ user }) {
                 </table>
               )}
             </Card>
+            ) : (
+              /* ── ALL-TIME LEADERBOARD ── */
+              (() => {
+                const allTimeData = members.map(m => {
+                  const ms    = allTimeSales.filter(s => s.uid === m.id)
+                  const prem  = ms.reduce((s, x) => s + (x.premium || 0), 0)
+                  const items = ms.reduce((s, x) => s + (x.items || 1), 0)
+                  return { m, prem, items, count: ms.length }
+                }).sort((a, b) => b.prem - a.prem)
+                const MEDALS_AT = ['🥇','🥈','🥉','4','5','6','7']
+                return (
+                  <Card p={0}>
+                    {allTimeData.every(d => d.count === 0) ? <EmptyState text="No all-time sales data yet." icon="📊" /> : (
+                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                        <thead>
+                          <tr style={{ background:'var(--surface-2)' }}>
+                            {['#','Agent','Total items','Total premium','Sales logged'].map(h => (
+                              <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allTimeData.map(({ m, prem, items, count }, i) => {
+                            const isMe = m.id === user.id
+                            return (
+                              <tr key={m.id} style={{ borderTop:'1px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent' }}>
+                                <td style={{ padding:'11px 12px', fontSize:14 }}>{MEDALS_AT[i] || (i+1)}</td>
+                                <td style={{ padding:'11px 12px' }}>
+                                  <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                                    <div style={{ width:26, height:26, borderRadius:'50%', background: isMe ? 'var(--primary)' : 'var(--primary-mid)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:600, color: isMe ? '#fff' : '#1e40af' }}>{m.ini}</div>
+                                    <span style={{ fontSize:12, fontWeight: isMe ? 600 : 500, color:'var(--text-1)' }}>
+                                      {m.name}{isMe && <span style={{ fontSize:9, color:'var(--primary)', fontWeight:700, marginLeft:5 }}>YOU</span>}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td style={{ padding:'11px 12px', fontSize:13, fontWeight:600, color:'var(--text-1)' }}>{items.toLocaleString()}</td>
+                                <td style={{ padding:'11px 12px', fontSize:13, fontWeight:700, color:'var(--success)' }}>${prem.toLocaleString()}</td>
+                                <td style={{ padding:'11px 12px', fontSize:12, color:'var(--text-3)' }}>{count.toLocaleString()}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </Card>
+                )
+              })()
+            )}
           </>
         )}
 
@@ -510,6 +632,29 @@ export default function Sales({ user }) {
                 )}
 
                 <Btn onClick={addSale} disabled={saving}>{saving ? 'Saving…' : '🎯 Log sale'}</Btn>
+
+                {/* Split sale toggle */}
+                <div style={{ marginTop:10, padding:'10px 12px', background:'var(--surface-2)', borderRadius:8, border:'1px solid var(--border)' }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, fontWeight:500, color:'var(--text-2)' }}>
+                    <input type="checkbox" checked={splitSale} onChange={e => { setSplitSale(e.target.checked); setSplitPartnerUid('') }} style={{ width:14, height:14, cursor:'pointer' }} />
+                    Split sale — share credit with another agent (50/50)
+                  </label>
+                  {splitSale && (
+                    <div style={{ marginTop:8 }}>
+                      <select style={IS} value={splitPartnerUid} onChange={e => setSplitPartnerUid(e.target.value)}>
+                        <option value="">Select split partner…</option>
+                        {members.filter(m => m.id !== (isAdmin ? sForm.uid : user.id)).map(m => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                      {splitPartnerUid && sForm.premium && (
+                        <div style={{ fontSize:11, color:'var(--text-3)', marginTop:6 }}>
+                          Each agent will receive <strong>${(Math.round(Number(sForm.premium) / 2 * 100) / 100).toLocaleString()}</strong> in premium credit
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </>
             )}
 
@@ -793,7 +938,7 @@ export default function Sales({ user }) {
         />
       )}
 
-      {saleToast && <SaleToast client={saleToast.client} premium={saleToast.premium} onDone={() => setSaleToast(null)} />}
+      {saleToast && <SaleToast client={saleToast.client} premium={saleToast.premium} split={saleToast.split} partner={saleToast.partner} onDone={() => setSaleToast(null)} />}
     </>
   )
 }
