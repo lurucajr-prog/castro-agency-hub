@@ -59,17 +59,54 @@ function currentMonthKey() {
 }
 
 // ── Sale toast ────────────────────────────────────────────────
-function SaleToast({ client, premium, split, partner, onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t) }, [])
+function SaleToast({ client, premium, split, partner, policyType, userId, userName, onDone }) {
+  const [reviewDone, setReviewDone] = useState(false)
+  const [logging,    setLogging]    = useState(false)
+
+  useEffect(() => { const t = setTimeout(onDone, 6000); return () => clearTimeout(t) }, [])
+
+  async function logReview() {
+    setLogging(true)
+    await supabase.from('reviews').insert({
+      client,
+      policy_type: policyType || 'Auto',
+      trigger_type: 'New Policy',
+      method: 'Text',
+      result: 'Pending',
+      asked_by_name: userName,
+      asked_by_uid: userId,
+    })
+    setReviewDone(true)
+    setLogging(false)
+  }
+
   return (
-    <div style={{ position:'fixed', top:80, left:'50%', transform:'translateX(-50%)', background:'var(--surface)', border:'2px solid #16a34a', borderRadius:16, padding:'18px 32px', zIndex:9998, textAlign:'center', boxShadow:'var(--shadow-lg)', animation:'toastIn .4s ease', minWidth:260 }}>
-      <div style={{ fontSize:40, marginBottom:8 }}>🎉</div>
-      <div style={{ fontSize:17, fontWeight:700, color:'#166534', marginBottom:4 }}>Sale logged!</div>
-      <div style={{ fontSize:13, color:'var(--text-2)' }}>
-        {client} · <strong style={{ color:'#166534' }}>${Number(premium).toLocaleString()}</strong>
+    <div style={{ position:'fixed', top:80, left:'50%', transform:'translateX(-50%)', background:'var(--surface)', border:'2px solid #16a34a', borderRadius:16, padding:'18px 28px', zIndex:9998, textAlign:'center', boxShadow:'var(--shadow-lg)', animation:'toastIn .4s ease', minWidth:280 }}>
+      <div style={{ fontSize:36, marginBottom:6 }}>🎉</div>
+      <div style={{ fontSize:16, fontWeight:700, color:'#166534', marginBottom:3 }}>Sale logged!</div>
+      <div style={{ fontSize:13, color:'var(--text-2)', marginBottom: split ? 4 : 12 }}>
+        {client} · <strong style={{ color:'#166634' }}>${Number(premium).toLocaleString()}</strong>
       </div>
       {split && partner && (
-        <div style={{ fontSize:11, color:'var(--text-3)', marginTop:4 }}>Split 50/50 with {partner}</div>
+        <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12 }}>Split 50/50 with {partner}</div>
+      )}
+      {/* Review suggestion */}
+      {!reviewDone ? (
+        <div style={{ borderTop:'1px solid var(--border)', paddingTop:10 }}>
+          <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:7 }}>Ask {client} for a review?</div>
+          <div style={{ display:'flex', gap:7, justifyContent:'center' }}>
+            <button onClick={logReview} disabled={logging} style={{ fontSize:11, fontWeight:600, color:'#fff', background:N, border:'none', borderRadius:7, padding:'5px 13px', cursor:'pointer', fontFamily:'inherit' }}>
+              {logging ? 'Logging…' : '⭐ Log review request'}
+            </button>
+            <button onClick={onDone} style={{ fontSize:11, color:'var(--text-3)', background:'none', border:'1px solid var(--border)', borderRadius:7, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit' }}>
+              Skip
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ borderTop:'1px solid var(--border)', paddingTop:10, fontSize:12, color:'#166534', fontWeight:500 }}>
+          ✓ Review request logged
+        </div>
       )}
     </div>
   )
@@ -165,6 +202,7 @@ export default function Sales({ user }) {
   // UI
   const [saleToast,    setSaleToast]    = useState(null)
   const [showItemDef,  setShowItemDef]  = useState(false)
+  const [reviewLogged, setReviewLogged] = useState(false)
 
   const isAdmin  = user.role === 'admin'
   const now      = new Date()
@@ -260,7 +298,7 @@ export default function Sales({ user }) {
       if (data) {
         setSales(ss => [data, ...ss])
         launchConfetti(); playFanfare()
-        setSaleToast({ client:sForm.client, premium:sForm.premium })
+        setSaleToast({ client:sForm.client, premium:sForm.premium, policyType:sForm.pt })
         await logAudit({ user, action:'INSERT', table:'sales', record_id:data.id, new_data:data })
       }
     }
@@ -938,7 +976,7 @@ export default function Sales({ user }) {
         />
       )}
 
-      {saleToast && <SaleToast client={saleToast.client} premium={saleToast.premium} split={saleToast.split} partner={saleToast.partner} onDone={() => setSaleToast(null)} />}
+      {saleToast && <SaleToast client={saleToast.client} premium={saleToast.premium} split={saleToast.split} partner={saleToast.partner} policyType={saleToast.policyType} userId={user.id} userName={user.name} onDone={() => setSaleToast(null)} />}
     </>
   )
 }
