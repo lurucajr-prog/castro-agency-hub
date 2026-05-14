@@ -605,6 +605,27 @@ export default function Dashboard({ user, setPage }) {
               )}
             </div>
           </div>
+
+          {/* Admin-only: overdue task breakdown */}
+          {isAdmin && (() => {
+            const todayStr   = new Date().toISOString().split('T')[0]
+            const agentsOver = members.map(m => ({
+              name:  m.name,
+              count: tasks.filter(t => t.uid === m.id && !t.done && t.due_date && t.due_date < todayStr).length,
+            })).filter(x => x.count > 0)
+            if (agentsOver.length === 0) return null
+            return (
+              <div style={{ background: 'var(--danger-light)', border: '1px solid #fca5a5', borderRadius: 7, padding: '7px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#991b1b' }}>⚠ Overdue tasks:</span>
+                {agentsOver.map(a => (
+                  <span key={a.name} style={{ fontSize: 11, color: '#7f1d1d', background: 'rgba(220,38,38,0.1)', borderRadius: 99, padding: '2px 8px' }}>
+                    {a.name} · {a.count}
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
+
           {myMoodToday ? (
             <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
               ✓ Checked in — {myMoodToday === 'fire' ? '🔥 Fired up' : myMoodToday === 'neutral' ? '😐 Neutral' : '😴 Low energy'}
