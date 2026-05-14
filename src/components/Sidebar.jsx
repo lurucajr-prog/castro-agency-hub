@@ -48,7 +48,7 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: null,
+    label: 'ADMIN',
     adminOnly: true,
     items: [
       { id: 'settings',   label: 'Settings',   icon: '⚙',  adminOnly: true },
@@ -62,7 +62,6 @@ export default function Sidebar({ user, page, setPage, onLogout, darkMode, toggl
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('sidebar_collapsed') === 'true' } catch { return false }
   })
-  const [btnHovered, setBtnHovered] = useState(false)
 
   const isAdmin         = user.role === 'admin'
   const canSeeLiveLeads = LIVE_LEAD_USERS.includes(user.name)
@@ -121,48 +120,43 @@ export default function Sidebar({ user, page, setPage, onLogout, darkMode, toggl
       boxShadow:      '4px 0 24px rgba(0,0,0,0.22)',
     }}>
 
-      {/* ── Logo ── */}
-      <div style={{ padding: collapsed ? '16px 0 13px' : '16px 15px 13px', borderBottom: '1px solid rgba(255,255,255,0.08)', textAlign: collapsed ? 'center' : 'left', flexShrink: 0 }}>
-        {collapsed
-          ? <div style={{ fontSize: 18, color: '#fff', fontWeight: 800, letterSpacing: -0.5 }}>C</div>
-          : <>
-              <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, letterSpacing: -0.3 }}>Castro Agency</div>
-              <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 10, marginTop: 2, letterSpacing: 0.3 }}>Office hub</div>
-            </>
-        }
+      {/* ── Logo + collapse button (inside header, always visible) ── */}
+      <div style={{ padding: collapsed ? '13px 8px' : '13px 15px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexShrink: 0 }}>
+        {collapsed ? (
+          <div style={{ fontSize: 18, color: '#fff', fontWeight: 800, letterSpacing: -0.5, margin: '0 auto' }}>C</div>
+        ) : (
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: '#fff', fontSize: 14, fontWeight: 700, letterSpacing: -0.3, whiteSpace: 'nowrap' }}>Castro Agency</div>
+            <div style={{ color: 'rgba(255,255,255,0.38)', fontSize: 10, marginTop: 1 }}>Office hub</div>
+          </div>
+        )}
+        {/* Collapse toggle — inside the header so it is always visible */}
+        <button
+          onClick={toggleCollapse}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          style={{
+            background:   'rgba(255,255,255,0.13)',
+            border:       '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 7,
+            width:        28,
+            height:       28,
+            cursor:       'pointer',
+            display:      'flex',
+            alignItems:   'center',
+            justifyContent: 'center',
+            color:        'rgba(255,255,255,0.75)',
+            fontSize:     15,
+            fontWeight:   700,
+            flexShrink:   0,
+            transition:   'background 0.15s, color 0.15s',
+            lineHeight:   1,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.24)'; e.currentTarget.style.color = '#fff' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.13)'; e.currentTarget.style.color = 'rgba(255,255,255,0.75)' }}
+        >
+          {collapsed ? '›' : '‹'}
+        </button>
       </div>
-
-      {/* ── Collapse toggle — bigger, more visible ── */}
-      <button
-        onClick={toggleCollapse}
-        onMouseEnter={() => setBtnHovered(true)}
-        onMouseLeave={() => setBtnHovered(false)}
-        title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        style={{
-          position:        'absolute',
-          top:             48,
-          right:           -14,
-          width:           28,
-          height:          28,
-          borderRadius:    '50%',
-          background:      btnHovered ? '#e8f0fe' : '#ffffff',
-          border:          `2px solid ${N}`,
-          cursor:          'pointer',
-          display:         'flex',
-          alignItems:      'center',
-          justifyContent:  'center',
-          fontSize:        13,
-          color:           N,
-          fontWeight:      800,
-          zIndex:          10,
-          boxShadow:       btnHovered ? '0 3px 12px rgba(0,0,0,0.25)' : '0 2px 8px rgba(0,0,0,0.18)',
-          transition:      'background 0.15s, box-shadow 0.15s, transform 0.15s',
-          transform:       btnHovered ? 'scale(1.1)' : 'scale(1)',
-          lineHeight:      1,
-        }}
-      >
-        {collapsed ? '→' : '←'}
-      </button>
 
       {/* ── Nav groups ── */}
       <nav style={{ flex: 1, padding: '6px 5px', overflowY: 'auto', overflowX: 'hidden' }}>
@@ -236,36 +230,8 @@ export default function Sidebar({ user, page, setPage, onLogout, darkMode, toggl
         ))}
       </nav>
 
-      {/* ── Bottom: dark mode + user + sign out ── */}
+      {/* ── Bottom: user + sign out ── */}
       <div style={{ padding: collapsed ? '8px 5px' : '10px 8px', borderTop: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
-
-        {/* Dark mode toggle */}
-        <button
-          onClick={toggleDarkMode}
-          title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-          style={{
-            width:          '100%',
-            background:     'rgba(255,255,255,0.06)',
-            border:         '1px solid rgba(255,255,255,0.1)',
-            borderRadius:   7,
-            color:          'rgba(255,255,255,0.5)',
-            fontSize:       collapsed ? 15 : 11,
-            padding:        collapsed ? '6px 0' : '5px 0',
-            cursor:         'pointer',
-            marginBottom:   6,
-            display:        'flex',
-            alignItems:     'center',
-            justifyContent: 'center',
-            gap:            6,
-            fontFamily:     'inherit',
-            transition:     'background 0.12s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
-        >
-          {darkMode ? '☀️' : '🌙'}
-          {!collapsed && <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>}
-        </button>
 
         {/* User info */}
         {!collapsed && (
