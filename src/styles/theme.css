@@ -185,3 +185,78 @@ input:focus, select:focus, textarea:focus {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   SESSION 10 — Accessibility and Polish
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Minimum font sizes for readability ──────────────────── */
+/* Table headers that were 10px are now 11px min */
+th  { font-size: max(11px, 0.69rem); }
+/* Table cells minimum 12px */
+td  { font-size: max(12px, 0.75rem); }
+/* Labels and muted text minimum 11px */
+label { font-size: max(11px, 0.69rem); }
+
+/* ── Table row hover ──────────────────────────────────────── */
+/* Apply .row-hover to any tbody to get consistent hover */
+.row-hover tr:hover td {
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+/* ── Button hover states ──────────────────────────────────── */
+button:not(:disabled):hover {
+  opacity: 0.88;
+}
+/* Override for nav items which manage their own hover */
+nav button:hover { opacity: 1; }
+
+/* ── Card hover ───────────────────────────────────────────── */
+.card-hover:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-2) !important;
+}
+
+/* ── Input transitions ────────────────────────────────────── */
+input, select, textarea {
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+/* ── Filter pill buttons ──────────────────────────────────── */
+/* Consistent active/inactive pill style site-wide */
+.pill {
+  padding: 3px 11px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: background 0.12s, color 0.12s;
+  font-family: inherit;
+}
+.pill.active {
+  background: var(--primary);
+  color: #fff;
+}
+.pill:not(.active) {
+  background: var(--surface-3);
+  color: var(--text-3);
+}
+.pill:not(.active):hover {
+  background: var(--border-2);
+  color: var(--text-2);
+}
+
+/* ── Smooth transitions for theme-aware elements ─────────── */
+.surface-transition {
+  transition: background var(--t-md), border-color var(--t-md), color var(--t-md);
+}
+
+/* ── Improved scrollbar for dark mode ────────────────────── */
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--border-2);
+}
+.dark ::-webkit-scrollbar-track {
+  background: var(--surface-2);
+}
