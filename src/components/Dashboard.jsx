@@ -154,6 +154,7 @@ export default function Dashboard({ user, setPage }) {
   const [lastMonthPrem,      setLastMonthPrem]      = useState(0)
   const [lastMonthItems,     setLastMonthItems]     = useState(0)
   const [adminStats,         setAdminStats]         = useState(null)
+  const [activityFeed,       setActivityFeed]       = useState([])
 
   const goalCelebrated = useRef(false)
   const isAdmin = user.role === 'admin'
@@ -229,6 +230,31 @@ export default function Dashboard({ user, setPage }) {
       goals: goals.data || [],
     })
     setLoading(false)
+
+    // ── Activity feed: recent sales + reviews left ──
+    const [recentSalesRes, recentReviewsRes] = await Promise.all([
+      supabase.from('sales').select('id, uid, client, premium, policy_type, created_at, is_split').order('created_at', { ascending: false }).limit(6),
+      supabase.from('reviews').select('id, asked_by_uid, asked_by_name, client, result, created_at').eq('result', 'Left a Review').order('created_at', { ascending: false }).limit(4),
+    ])
+    const feed = [
+      ...(recentSalesRes.data || []).map(s => ({ ...s, _type: 'sale' })),
+      ...(recentReviewsRes.data || []).map(r => ({ ...r, _type: 'review' })),
+    ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 8)
+    setActivityFeed(feed)
+
+    // ── Real-time: update monthSales + activity feed when sales are logged ──
+    const salesRtCh = supabase.channel('dashboard_sales_rt')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales' }, payload => {
+        const sale = payload.new
+        // Add to monthSales if it belongs to the current month
+        const mStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+        if (sale.created_at >= mStart) {
+          setData(prev => prev ? ({ ...prev, monthSales: [sale, ...prev.monthSales] }) : prev)
+        }
+        // Add to activity feed
+        setActivityFeed(prev => [{ ...sale, _type: 'sale' }, ...prev].slice(0, 8))
+      })
+      .subscribe()
 
     // Admin-only: fetch quick stats for the summary section
     if (user.role === 'admin') {
@@ -328,6 +354,9 @@ export default function Dashboard({ user, setPage }) {
   const members   = profiles.filter(p => p.role === 'member')
   const goalsMap  = {}; goals.forEach(g => { goalsMap[g.uid] = g })
 
+  // Include admins who toggled show_on_leaderboard
+  const lbParticipants = profiles.filter(p => p.role === 'member' || (p.role === 'admin' && p.show_on_leaderboard))
+
   const totalPrem     = monthSales.reduce((s, x) => s + (x.premium || 0), 0)
   const totalItems    = monthSales.reduce((s, x) => s + (x.items || 1), 0)
   const totalPremGoal = members.reduce((sum, m) => sum + (goalsMap[m.id]?.premium || 10000), 0)
@@ -352,7 +381,7 @@ export default function Dashboard({ user, setPage }) {
   const expectedPct = bizTotal > 0 ? Math.round(bizElapsed / bizTotal * 100) : 0
 
   // ── Leaderboard ───────────────────────────────────────────────
-  const lbData = members.map(m => {
+  const lbData = lbParticipants.map(m => {
     const ms     = monthSales.filter(s => s.uid === m.id)
     const prem   = ms.reduce((s, x) => s + (x.premium || 0), 0)
     const items  = ms.reduce((s, x) => s + (x.items || 1), 0)
@@ -363,6 +392,17 @@ export default function Dashboard({ user, setPage }) {
 
   const myRank = lbData.findIndex(x => x.m.id === user.id) + 1  // 1-based, 0 = not found
 
+  // ── Today's total ────────────────────────────────────────────
+  const todayStart     = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+  const todaySales     = monthSales.filter(s => s.created_at >= todayStart)
+  const todayTotal     = todaySales.reduce((s, x) => s + (x.premium || 0), 0)
+  const todayCount     = todaySales.length
+
+  // ── Pace to close ─────────────────────────────────────────────
+  const projectedPremium = bizElapsed > 0
+    ? Math.round((totalPrem / bizElapsed) * bizTotal)
+    : 0
+
   const today = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   const stats = [
@@ -370,6 +410,7 @@ export default function Dashboard({ user, setPage }) {
       label: 'Premium this month',
       val:   '$' + totalPrem.toLocaleString(),
       sub:   premPct + '% of $' + teamGoal.toLocaleString() + ' goal',
+      sub2:  todayTotal > 0 ? `+$${todayTotal.toLocaleString()} today (${todayCount} sale${todayCount !== 1 ? 's' : ''})` : null,
       pct:   premPct,
       bg:    '#EAF3DE', tx: '#27500A', bar: '#639922',
       trend: premTrend,
@@ -480,10 +521,15 @@ export default function Dashboard({ user, setPage }) {
           <div key={s.label} style={{ background: s.bg, borderRadius: 10, padding: '12px 14px' }}>
             <div style={{ fontSize: 10, color: s.tx, fontWeight: 500, opacity: 0.7, marginBottom: 3 }}>{s.label}</div>
             <div style={{ fontSize: 22, fontWeight: 500, color: s.tx, lineHeight: 1, marginBottom: 2 }}>{s.val}</div>
-            <div style={{ fontSize: 10, color: s.tx, opacity: 0.65, marginBottom: s.pct !== null ? 5 : 0 }}>
+            <div style={{ fontSize: 10, color: s.tx, opacity: 0.65, marginBottom: s.sub2 || s.pct !== null ? 4 : 0 }}>
               {s.sub}
               <TrendBadge pct={s.trend} tx={s.tx} />
             </div>
+            {s.sub2 && (
+              <div style={{ fontSize: 10, fontWeight: 600, color: s.tx, background: 'rgba(0,0,0,0.09)', borderRadius: 5, padding: '2px 6px', display: 'inline-block', marginBottom: 5 }}>
+                {s.sub2}
+              </div>
+            )}
             {s.pct !== null && (
               <div style={{ height: 3, background: 'rgba(0,0,0,.1)', borderRadius: 99 }}>
                 <div style={{ width: s.pct + '%', height: '100%', background: s.bar, borderRadius: 99, transition: 'width 0.5s ease' }} />
@@ -492,6 +538,53 @@ export default function Dashboard({ user, setPage }) {
           </div>
         ))}
       </div>
+
+      {/* ── Goal countdown + pace to close ── */}
+      {teamGoal > 0 && (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 18px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Monthly goal</span>
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>${totalPrem.toLocaleString()} of ${teamGoal.toLocaleString()}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {projectedPremium > 0 && (
+                <span style={{ fontSize: 11, color: projectedPremium >= teamGoal ? 'var(--success)' : 'var(--warning)', fontWeight: 500 }}>
+                  At current pace: ${projectedPremium.toLocaleString()} by month end
+                </span>
+              )}
+              <span style={{ fontSize: 11, fontWeight: 600, color: premPct >= 100 ? 'var(--success)' : 'var(--text-3)' }}>{premPct}%</span>
+            </div>
+          </div>
+          {/* Animated progress bar */}
+          <div style={{ height: 10, background: 'var(--surface-3)', borderRadius: 99, overflow: 'hidden', position: 'relative' }}>
+            {/* Expected pace marker */}
+            {expectedPct > 0 && expectedPct < 100 && (
+              <div style={{ position: 'absolute', top: 0, bottom: 0, left: expectedPct + '%', width: 2, background: 'var(--border-2)', zIndex: 2 }} title={`Expected: ${expectedPct}%`} />
+            )}
+            <div style={{
+              height: '100%',
+              width: Math.min(100, premPct) + '%',
+              background: premPct >= 100
+                ? 'var(--success)'
+                : premPct >= expectedPct
+                  ? 'linear-gradient(90deg, #639922, #16a34a)'
+                  : 'linear-gradient(90deg, #d97706, #f59e0b)',
+              borderRadius: 99,
+              transition: 'width 0.8s ease',
+            }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+            <span style={{ fontSize: 10, color: 'var(--text-4)' }}>$0</span>
+            {expectedPct > 0 && expectedPct < 100 && (
+              <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: expectedPct - 10 + '%' }}>
+                ↑ pace
+              </span>
+            )}
+            <span style={{ fontSize: 10, color: 'var(--text-4)' }}>${teamGoal.toLocaleString()}</span>
+          </div>
+        </div>
+      )}
 
       {/* ── Morning standup ── */}
       {standupEnabled && (
@@ -669,6 +762,45 @@ export default function Dashboard({ user, setPage }) {
                 <div style={{ fontSize: 13, color: '#fff', lineHeight: 1.65, fontStyle: 'italic', marginBottom: quoteAuthor ? 8 : 0 }}>"{quoteText}"</div>
                 {quoteAuthor && <div style={{ fontSize: 11, color: 'rgba(255,255,255,.55)', fontWeight: 500 }}>— {quoteAuthor}</div>}
               </>
+            )}
+          </div>
+
+          {/* ── Activity feed ── */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 12 }}>Team activity</div>
+            {activityFeed.length === 0 ? (
+              <div style={{ fontSize: 12, color: 'var(--text-4)', textAlign: 'center', padding: '12px 0', fontStyle: 'italic' }}>No recent activity yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {activityFeed.map((item, i) => {
+                  const isSale   = item._type === 'sale'
+                  const profile  = profiles.find(p => p.id === (isSale ? item.uid : item.asked_by_uid))
+                  const timeAgo  = (() => {
+                    const diff = Date.now() - new Date(item.created_at).getTime()
+                    const m = Math.floor(diff / 60000)
+                    if (m < 1) return 'just now'
+                    if (m < 60) return `${m}m ago`
+                    const h = Math.floor(m / 60)
+                    if (h < 24) return `${h}h ago`
+                    return Math.floor(h / 24) + 'd ago'
+                  })()
+                  return (
+                    <div key={item.id + i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: 14, flexShrink: 0, marginTop: 1 }}>{isSale ? '💰' : '⭐'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.4 }}>
+                          <span style={{ fontWeight: 600 }}>{profile?.name || 'Someone'}</span>
+                          {isSale
+                            ? <> logged a sale — {item.policy_type} · <span style={{ color: 'var(--success)', fontWeight: 500 }}>${(item.premium || 0).toLocaleString()}</span>{item.is_split && <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: 4 }}>(split)</span>}</>
+                            : <> · <span style={{ fontWeight: 500 }}>{item.client}</span> left a review</>
+                          }
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>{timeAgo}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
         </div>
