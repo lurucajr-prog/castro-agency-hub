@@ -12,9 +12,12 @@ function SavedBadge({ show }) {
 }
 
 export default function AdminSettings({ user }) {
-  const [settings, setSettings] = useState({})
-  const [loading,  setLoading]  = useState(true)
-  const [saved,    setSaved]    = useState({})
+  const [settings,    setSettings]    = useState({})
+  const [loading,     setLoading]     = useState(true)
+  const [saved,       setSaved]       = useState({})
+  const [pushMsg,     setPushMsg]     = useState('')
+  const [pushSending, setPushSending] = useState(false)
+  const [pushSent,    setPushSent]    = useState(false)
 
   useEffect(() => { fetchSettings() }, [])
 
@@ -24,6 +27,27 @@ export default function AdminSettings({ user }) {
     ;(data || []).forEach(s => { map[s.key] = s.value })
     setSettings(map)
     setLoading(false)
+  }
+
+  async function sendBulkPush() {
+    if (!pushMsg.trim()) return
+    setPushSending(true)
+    const { data: profiles } = await supabase.from('profiles').select('id')
+    const notifications = (profiles || []).filter(p => p.id !== user.id).map(p => ({
+      to_uid:     p.id,
+      type:       'announcement',
+      title:      '📢 Team announcement',
+      body:       pushMsg.trim(),
+      nav_target: 'dashboard',
+      read:       false,
+    }))
+    if (notifications.length > 0) {
+      await supabase.from('notifications').insert(notifications)
+    }
+    setPushMsg('')
+    setPushSending(false)
+    setPushSent(true)
+    setTimeout(() => setPushSent(false), 3000)
   }
 
   async function save(key, value) {
@@ -165,6 +189,29 @@ export default function AdminSettings({ user }) {
               Currently: {announcementOn ? '🟢 Visible to team' : '🔴 Hidden'}
             </span>
           </div>
+        </Card>
+
+        {/* Bulk push notification */}
+        <Card style={{ gridColumn:'1 / -1' }}>
+          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
+            Send team push notification
+            {pushSent && <span style={{ fontSize:11, color:'var(--success)', marginLeft:8, fontWeight:500 }}>✓ Sent to team!</span>}
+          </div>
+          <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12, lineHeight:1.5 }}>
+            Sends an instant notification to all team members who are currently connected. This shows as a bell alert AND triggers a browser popup (if notifications are enabled). This is separate from the dashboard banner above.
+          </div>
+          <Field label="Message">
+            <input
+              style={IS}
+              value={pushMsg}
+              onChange={e => setPushMsg(e.target.value)}
+              placeholder="e.g. Reminder: team meeting starts in 10 minutes!"
+              onKeyDown={e => { if (e.key === 'Enter') sendBulkPush() }}
+            />
+          </Field>
+          <Btn onClick={sendBulkPush} disabled={pushSending || !pushMsg.trim()}>
+            {pushSending ? 'Sending…' : '📢 Send to team'}
+          </Btn>
         </Card>
 
       </div>
