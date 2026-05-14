@@ -22,8 +22,6 @@ import Chat                  from './components/Chat'
 import DirectMessages        from './components/DirectMessages'
 import Profiles              from './components/Profiles'
 import Suggestions           from './components/Suggestions'
-import AdminSettings         from './components/AdminSettings'
-import AuditLog              from './components/AuditLog'
 import { Spinner }           from './components/shared'
 
 const PAGES = {
@@ -38,8 +36,6 @@ const PAGES = {
   learning:      Learning,
   profiles:      Profiles,
   suggestions:   Suggestions,
-  settings:      AdminSettings,
-  'audit-log':   AuditLog,
 }
 
 // These pages stay mounted once visited so navigating back is instant
@@ -111,6 +107,25 @@ export default function App() {
     setDmTarget(profileId)
     setPage('dms')
   }
+
+  // ── Browser tab badge ──────────────────────────────────────
+  useEffect(() => {
+    if (!profile) return
+    async function updateBadge() {
+      const [dm, notif] = await Promise.all([
+        supabase.from('direct_messages').select('*', { count:'exact', head:true }).eq('to_uid', profile.id).eq('read', false),
+        supabase.from('notifications').select('*', { count:'exact', head:true }).eq('to_uid', profile.id).eq('read', false),
+      ])
+      const total = (dm.count || 0) + (notif.count || 0)
+      document.title = total > 0 ? `(${total}) Castro Agency Hub` : 'Castro Agency Hub'
+    }
+    updateBadge()
+    const ch = supabase.channel('tab_badge_watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'direct_messages', filter: `to_uid=eq.${profile.id}` }, updateBadge)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications',   filter: `to_uid=eq.${profile.id}` }, updateBadge)
+      .subscribe()
+    return () => { supabase.removeChannel(ch); document.title = 'Castro Agency Hub' }
+  }, [profile?.id])
 
   // ── Loading screen ─────────────────────────────────────────
   if (loading) {
