@@ -21,6 +21,8 @@ const PAGE_LABELS = {
   dms:           'Messages',
   profiles:      'Profiles',
   suggestions:   'Suggestions',
+  settings:      'Admin Settings',
+  'audit-log':   'Audit Log',
 }
 
 const TYPE_ICON  = { mention: '💬', announcement: '📢', dm: '✉️', task: '☑️' }
