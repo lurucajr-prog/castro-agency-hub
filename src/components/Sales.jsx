@@ -15,7 +15,11 @@ const ITEM_TYPES = [
 
 const ITEMS_ADDED_TYPES = ['Vehicle','Driver','Property','Jewelry / Valuables','Other']
 
-const LEAD_SOURCES  = ['BP','Allstate Lead Marketplace','Other']
+const LEAD_SOURCES  = ['BP', 'EverQuote', 'Allstate Lead Marketplace', 'Other']
+const LEAD_RETURN_REASONS = [
+  'Disconnected', 'Wrong Number', 'No Answer', 'Bad Lead Info',
+  'Already Has Insurance', 'Duplicate', 'Called Too Late', 'Other',
+]
 const LEAD_STATUSES = ['New','Contacted','Quoted','Sold','Lost']
 const LEAD_STATUS_COLORS = {
   'New':       { bg:'#f3f4f6', tx:'#374151' },
@@ -26,6 +30,7 @@ const LEAD_STATUS_COLORS = {
 }
 const LEAD_SOURCE_COLORS = {
   'BP':                        { bg:'#ede9fe', tx:'#5b21b6' },
+  'EverQuote':                 { bg:'#dcfce7', tx:'#166534' },
   'Allstate Lead Marketplace': { bg:'#dbeafe', tx:'#1e40af' },
   'Other':                     { bg:'#f3f4f6', tx:'#374151' },
 }
@@ -177,7 +182,7 @@ export default function Sales({ user }) {
   const [gForm,      setGForm]      = useState({ monthly_items:'', monthly_premium:'', monthly_quotes:'', weekly_items:'', weekly_premium:'', weekly_quotes:'' })
   const [sForm,      setSForm]      = useState({ uid:'', client:'', pt:'Auto', premium:'', items:1 })
   const [iaForm,     setIaForm]     = useState({ uid:'', client:'', item_type:'Vehicle', notes:'' })
-  const [lForm,      setLForm]      = useState({ name:'', phone:'', source:'BP', notes:'' })
+  const [lForm,      setLForm]      = useState({ name:'', phone:'', source:'BP', return_reason:'Disconnected' })
   const [saving,     setSaving]     = useState(false)
 
   // Split sale
@@ -348,7 +353,7 @@ export default function Sales({ user }) {
   async function addLead() {
     if (!lForm.name.trim() || !lForm.phone.trim()) return; setSaving(true)
     const { data } = await supabase.from('lead_returns').insert({ ...lForm, logged_by:user.id, status:'New' }).select().single()
-    if (data) setLeads(ls => [data, ...ls]); setLForm({ name:'', phone:'', source:'BP', notes:'' }); setSaving(false)
+    if (data) setLeads(ls => [data, ...ls]); setLForm({ name:'', phone:'', source:'BP', return_reason:'Disconnected' }); setSaving(false)
   }
   async function updateLeadStatus(id, status) { await supabase.from('lead_returns').update({ status }).eq('id', id); setLeads(ls => ls.map(l => l.id === id ? { ...l, status } : l)) }
   async function updateLeadNotes(id, notes)   { await supabase.from('lead_returns').update({ notes }).eq('id', id); setLeads(ls => ls.map(l => l.id === id ? { ...l, notes } : l)) }
@@ -780,7 +785,11 @@ export default function Sales({ user }) {
                       <Field label="Name *"><input style={IS} value={lForm.name} onChange={e => setLForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. John Smith" /></Field>
                       <Field label="Phone *"><input style={IS} value={lForm.phone} onChange={e => setLForm(f => ({ ...f, phone:e.target.value }))} placeholder="e.g. 708-555-0123" /></Field>
                       <Field label="Source"><select style={IS} value={lForm.source} onChange={e => setLForm(f => ({ ...f, source:e.target.value }))}>{LEAD_SOURCES.map(s => <option key={s}>{s}</option>)}</select></Field>
-                      <Field label="Notes"><input style={IS} value={lForm.notes} onChange={e => setLForm(f => ({ ...f, notes:e.target.value }))} placeholder="Optional…" /></Field>
+                      <Field label="Return reason">
+                        <select style={IS} value={lForm.return_reason} onChange={e => setLForm(f => ({ ...f, return_reason:e.target.value }))}>
+                          {LEAD_RETURN_REASONS.map(r => <option key={r}>{r}</option>)}
+                        </select>
+                      </Field>
                     </div>
                     <Btn onClick={addLead} disabled={saving}>{saving ? 'Saving…' : '+ Log lead return'}</Btn>
                   </Card>
@@ -820,9 +829,20 @@ export default function Sales({ user }) {
                                       {LEAD_STATUSES.map(s => { const c = LEAD_STATUS_COLORS[s]; return <button key={s} onClick={e => { e.stopPropagation(); updateLeadStatus(l.id, s) }} style={{ padding:'3px 9px', borderRadius:99, cursor:'pointer', fontSize:11, fontWeight:500, border:`1px solid ${l.status===s?c.tx:'var(--border)'}`, background:l.status===s?c.bg:'var(--surface)', color:l.status===s?c.tx:'var(--text-3)' }}>{s}</button> })}
                                     </div>
                                   </div>
-                                  <div style={{ flex:1, minWidth:180 }}>
-                                    <div style={{ fontSize:10, fontWeight:500, color:'var(--text-4)', marginBottom:5, textTransform:'uppercase' }}>Notes</div>
-                                    <input defaultValue={l.notes || ''} onBlur={e => updateLeadNotes(l.id, e.target.value)} placeholder="Add notes…" style={{ ...IS, fontSize:12 }} onClick={e => e.stopPropagation()} />
+                                  <div style={{ minWidth:180 }}>
+                                    <div style={{ fontSize:10, fontWeight:500, color:'var(--text-4)', marginBottom:5, textTransform:'uppercase' }}>Return reason</div>
+                                    <select
+                                      value={l.return_reason || 'Disconnected'}
+                                      onClick={e => e.stopPropagation()}
+                                      onChange={async e => {
+                                        const return_reason = e.target.value
+                                        await supabase.from('lead_returns').update({ return_reason }).eq('id', l.id)
+                                        setLeads(ls => ls.map(x => x.id === l.id ? { ...x, return_reason } : x))
+                                      }}
+                                      style={{ ...IS, fontSize:12 }}
+                                    >
+                                      {LEAD_RETURN_REASONS.map(r => <option key={r}>{r}</option>)}
+                                    </select>
                                   </div>
                                   <button onClick={e => { e.stopPropagation(); deleteLead(l.id) }} style={{ border:'none', background:'none', cursor:'pointer', color:'#ef4444', fontSize:12, alignSelf:'flex-end' }}>🗑 Delete</button>
                                 </div>
