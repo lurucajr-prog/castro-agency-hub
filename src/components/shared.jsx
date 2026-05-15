@@ -270,9 +270,11 @@ export function Modal({ title, onClose, children, width = 520 }) {
       }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-1)' }}>{title}</span>
-          <button onClick={onClose} style={{ border: 'none', background: 'var(--surface-2)', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', color: 'var(--text-3)', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, transition: 'background 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-3)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'var(--surface-2)'}
+          <button
+            onClick={onClose}
+            style={{ border: '1.5px solid var(--border-2)', background: 'var(--surface-2)', width: 32, height: 32, borderRadius: '50%', cursor: 'pointer', color: 'var(--text-1)', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, fontWeight: 400, flexShrink: 0, transition: 'background 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--danger-light)'; e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.borderColor = 'var(--danger)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.color = 'var(--text-1)'; e.currentTarget.style.borderColor = 'var(--border-2)' }}
           >×</button>
         </div>
         <div style={{ padding: 20, overflowY: 'auto', flex: 1 }}>
