@@ -40,11 +40,17 @@ export default function Tasks({ user }) {
   const [confirmDelTpl,   setConfirmDelTpl]   = useState(null)
 
   const isAdmin = user.role === 'admin'
-  const members = profiles.filter(p => p.role === 'member')
+  const members = profiles  // all profiles can be assigned tasks now (admin + member)
   const today   = new Date().toISOString().split('T')[0]
 
   useEffect(() => { fetchData() }, [])
-  useEffect(() => { if (members.length > 0 && !sel) setSel(members[0]) }, [profiles])
+  useEffect(() => {
+    // Default selector: pick first non-current-user profile, or current user
+    if (profiles.length > 0 && !sel) {
+      const first = profiles.find(p => p.id !== user.id) || profiles[0]
+      setSel(first)
+    }
+  }, [profiles])
 
   async function fetchData() {
     const [t, p, tpl] = await Promise.all([
@@ -55,13 +61,32 @@ export default function Tasks({ user }) {
     setTasks(t.data || [])
     setProfiles(p.data || [])
     setTemplates(tpl.data || [])
-    setForm(f => ({ ...f, uid: p.data?.find(x => x.role === 'member')?.id || '' }))
+    // Default assign-to: first profile that isn't current user
+    const allP = p.data || []
+    const defaultUid = allP.find(x => x.id !== user.id)?.id || user.id
+    setForm(f => ({ ...f, uid: defaultUid }))
     setLoading(false)
   }
 
   async function toggleTask(id, done) {
-    await supabase.from('tasks').update({ done: !done }).eq('id', id)
-    setTasks(ts => ts.map(t => t.id === id ? { ...t, done: !done } : t))
+    const newDone = !done
+    await supabase.from('tasks').update({ done: newDone }).eq('id', id)
+    setTasks(ts => ts.map(t => t.id === id ? { ...t, done: newDone } : t))
+
+    // If task is being marked done, notify the person who assigned it (if not self)
+    if (newDone) {
+      const task = tasks.find(t => t.id === id)
+      if (task?.assigned_by_uid && task.assigned_by_uid !== user.id) {
+        await supabase.from('notifications').insert({
+          to_uid:     task.assigned_by_uid,
+          type:       'task_done',
+          title:      '✅ Task completed',
+          body:       `${user.name} completed: "${task.title}"`,
+          nav_target: 'tasks',
+          read:       false,
+        })
+      }
+    }
   }
 
   async function confirmDeleteTask() {
@@ -78,11 +103,35 @@ export default function Tasks({ user }) {
     setErrors({})
     setSaving(true)
     const uid = isAdmin ? form.uid : user.id
+    const assignedProfile = profiles.find(p => p.id === uid)
     const { data, error } = await supabase.from('tasks')
-      .insert({ uid, title: form.title.trim(), note: form.note, pri: form.pri, done: false, rolled: false, due_date: form.due_date || null })
+      .insert({
+        uid,
+        title:            form.title.trim(),
+        note:             form.note,
+        pri:              form.pri,
+        done:             false,
+        rolled:           false,
+        due_date:         form.due_date || null,
+        assigned_by_uid:  user.id,
+        assigned_by_name: user.name,
+      })
       .select().single()
     if (error) { console.error('[Tasks] add error', error); setSaving(false); return }
     if (data) setTasks(ts => [data, ...ts])
+
+    // Notify the assigned person (if not assigning to yourself)
+    if (uid !== user.id) {
+      await supabase.from('notifications').insert({
+        to_uid:     uid,
+        type:       'task_assigned',
+        title:      `📋 New task from ${user.name}`,
+        body:       form.title.trim() + (form.due_date ? ` · Due ${form.due_date}` : ''),
+        nav_target: 'tasks',
+        read:       false,
+      })
+    }
+
     setForm(f => ({ ...f, title: '', note: '', due_date: '' }))
     setShowModal(false)
     setSaving(false)
