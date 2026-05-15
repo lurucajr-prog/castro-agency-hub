@@ -174,7 +174,7 @@ export default function Profiles({ user, setPage, openDm }) {
 
   return (
     <>
-      <div style={{ padding: 22 }}>
+      <div style={{ padding: '22px 22px 4px' }}>
         <div style={{ marginBottom: 20 }}>
           <div style={{ fontSize: 18, fontWeight: 500, color: 'var(--text-1)', marginBottom: 2 }}>Team profiles</div>
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Meet the Castro Agency team</div>
