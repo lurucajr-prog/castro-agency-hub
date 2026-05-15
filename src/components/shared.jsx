@@ -55,11 +55,9 @@ export function Card({ children, mb, p, style, onClick, ...props }) {
 }
 
 // ── Button ───────────────────────────────────────────────────
-// Electric blue primary, satisfying hover lift and glow.
+// Uses direct DOM event handlers for hover/press -- no useState needed,
+// no hook-related issues, and works reliably in all contexts.
 export function Btn({ children, onClick, disabled, variant, sm, style, type = 'button', ...props }) {
-  const [hovered, setHovered] = useState(false)
-  const [pressed, setPressed] = useState(false)
-
   const base = {
     display:        'inline-flex',
     alignItems:     'center',
@@ -71,59 +69,50 @@ export function Btn({ children, onClick, disabled, variant, sm, style, type = 'b
     fontWeight:     600,
     cursor:         disabled ? 'not-allowed' : 'pointer',
     opacity:        disabled ? 0.5 : 1,
-    transition:     'background 0.15s, box-shadow 0.15s, transform 0.1s, border-color 0.15s',
+    transition:     'background 0.15s, box-shadow 0.15s, border-color 0.15s',
     border:         'none',
     flexShrink:     0,
     fontFamily:     'inherit',
     lineHeight:     1,
-    transform:      pressed ? 'scale(0.97)' : hovered ? 'translateY(-1px)' : 'none',
     ...style,
-  }
-
-  const handlers = disabled ? {} : {
-    onMouseEnter: () => setHovered(true),
-    onMouseLeave: () => { setHovered(false); setPressed(false) },
-    onMouseDown:  () => setPressed(true),
-    onMouseUp:    () => setPressed(false),
   }
 
   if (variant === 'outline') {
     return (
-      <button type={type} onClick={disabled ? undefined : onClick} style={{ ...base, background: hovered ? 'var(--surface-2)' : 'transparent', border: '1px solid var(--border-2)', color: 'var(--text-2)', transform: pressed ? 'scale(0.97)' : 'none' }} {...handlers} {...props}>
-        {children}
-      </button>
+      <button type={type} onClick={disabled ? undefined : onClick} disabled={disabled}
+        style={{ ...base, background: 'transparent', border: '1px solid var(--border-2)', color: 'var(--text-2)' }}
+        onMouseEnter={e => { if (!disabled) e.currentTarget.style.background = 'var(--surface-2)' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+        {...props}>{children}</button>
     )
   }
   if (variant === 'danger') {
     return (
-      <button type={type} onClick={disabled ? undefined : onClick} style={{ ...base, background: hovered ? 'var(--danger-hover)' : 'var(--danger)', color: '#fff', boxShadow: hovered ? '0 4px 12px rgba(220,38,38,0.3)' : 'none' }} {...handlers} {...props}>
-        {children}
-      </button>
+      <button type={type} onClick={disabled ? undefined : onClick} disabled={disabled}
+        style={{ ...base, background: 'var(--danger)', color: '#fff' }}
+        onMouseEnter={e => { if (!disabled) { e.currentTarget.style.background = 'var(--danger-hover)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(220,38,38,0.3)' } }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'var(--danger)'; e.currentTarget.style.boxShadow = 'none' }}
+        {...props}>{children}</button>
     )
   }
   if (variant === 'ghost') {
     return (
-      <button type={type} onClick={disabled ? undefined : onClick} style={{ ...base, background: hovered ? 'var(--surface-2)' : 'transparent', color: 'var(--text-3)', border: 'none', transform: 'none' }} {...handlers} {...props}>
-        {children}
-      </button>
+      <button type={type} onClick={disabled ? undefined : onClick} disabled={disabled}
+        style={{ ...base, background: 'transparent', color: 'var(--text-3)', border: 'none' }}
+        onMouseEnter={e => { if (!disabled) e.currentTarget.style.background = 'var(--surface-2)' }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+        {...props}>{children}</button>
     )
   }
-  // Primary: electric blue with glow
+  // Primary: electric blue with glow on hover
   return (
-    <button
-      type={type}
-      onClick={disabled ? undefined : onClick}
-      style={{
-        ...base,
-        background: hovered ? 'var(--primary-hover)' : 'var(--primary)',
-        color: '#fff',
-        boxShadow: hovered ? 'var(--shadow-blue)' : 'none',
-      }}
-      {...handlers}
-      {...props}
-    >
-      {children}
-    </button>
+    <button type={type} onClick={disabled ? undefined : onClick} disabled={disabled}
+      style={{ ...base, background: 'var(--primary)', color: '#fff' }}
+      onMouseEnter={e => { if (!disabled) { e.currentTarget.style.background = 'var(--primary-hover)'; e.currentTarget.style.boxShadow = 'var(--shadow-blue)'; e.currentTarget.style.transform = 'translateY(-1px)' } }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}
+      onMouseDown={e => { if (!disabled) e.currentTarget.style.transform = 'scale(0.97)' }}
+      onMouseUp={e => { if (!disabled) e.currentTarget.style.transform = 'translateY(-1px)' }}
+      {...props}>{children}</button>
   )
 }
 
@@ -198,7 +187,7 @@ export function Spinner({ size = 30, padding = 48 }) {
       <div style={{
         width:          size,
         height:         size,
-        border:         `2.5px solid var(--border)`,
+        border:         `3px solid #d1d9e6`,
         borderTopColor: 'var(--primary)',
         borderRadius:   '50%',
         animation:      'spin 0.65s linear infinite',
