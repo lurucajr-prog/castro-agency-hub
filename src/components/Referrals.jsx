@@ -156,6 +156,19 @@ export default function Referrals({ user }) {
     const assigned_to_name = assignment?.name || null
     await supabase.from('referrals').update({ assigned_to, assigned_to_name }).eq('id', id)
     setRefs(rs => rs.map(r => r.id === id ? { ...r, assigned_to, assigned_to_name } : r))
+
+    // Notify the assigned person if it's not the current user
+    if (assigned_to && assigned_to !== user.id) {
+      const ref = refs.find(r => r.id === id)
+      await supabase.from('notifications').insert({
+        to_uid:     assigned_to,
+        type:       'referral_assigned',
+        title:      `📋 Referral assigned to you`,
+        body:       `${ref?.prospect || 'A referral'} — referred by ${ref?.referred_by || 'unknown'}`,
+        nav_target: 'referrals',
+        read:       false,
+      })
+    }
   }
 
   async function deleteRef(ref) {
