@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { N, Card, Btn, Spinner, EmptyState, IS } from './shared'
-import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm'
+// XLSX is loaded dynamically inside handleImport to avoid CSP eval() violations
 
 const STATUSES = ['Not Started', 'Called', 'Left VM', 'Reached', 'Saved', 'Lost']
 const STATUS_COLORS = {
@@ -55,6 +55,7 @@ export default function Cancellations({ user }) {
     if (!file) return
     setImporting(true)
     try {
+      const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm')
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
