@@ -22,11 +22,17 @@ export default function AdminSettings({ user }) {
   useEffect(() => { fetchSettings() }, [])
 
   async function fetchSettings() {
-    const { data } = await supabase.from('settings').select('*')
-    const map = {}
-    ;(data || []).forEach(s => { map[s.key] = s.value })
-    setSettings(map)
-    setLoading(false)
+    try {
+      const { data, error } = await supabase.from('settings').select('*')
+      if (error) console.error('[AdminSettings] fetch error', error)
+      const map = {}
+      ;(data || []).forEach(s => { map[s.key] = s.value })
+      setSettings(map)
+    } catch (e) {
+      console.error('[AdminSettings] unexpected error', e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function sendBulkPush() {
