@@ -1,6 +1,7 @@
 // ============================================================
 // Castro Agency Hub — Admin Settings
 // Place this file at: src/components/AdminSettings.jsx
+// Batch 1: added Google review link field
 // ============================================================
 import { useState, useEffect } from 'react'
 import { supabase }   from '../lib/supabase'
@@ -12,48 +13,18 @@ function SavedBadge({ show }) {
 }
 
 export default function AdminSettings({ user }) {
-  const [settings,    setSettings]    = useState({})
-  const [loading,     setLoading]     = useState(true)
-  const [saved,       setSaved]       = useState({})
-  const [pushMsg,     setPushMsg]     = useState('')
-  const [pushSending, setPushSending] = useState(false)
-  const [pushSent,    setPushSent]    = useState(false)
+  const [settings, setSettings] = useState({})
+  const [loading,  setLoading]  = useState(true)
+  const [saved,    setSaved]    = useState({})
 
   useEffect(() => { fetchSettings() }, [])
 
   async function fetchSettings() {
-    try {
-      const { data, error } = await supabase.from('settings').select('*')
-      if (error) console.error('[AdminSettings] fetch error', error)
-      const map = {}
-      ;(data || []).forEach(s => { map[s.key] = s.value })
-      setSettings(map)
-    } catch (e) {
-      console.error('[AdminSettings] unexpected error', e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function sendBulkPush() {
-    if (!pushMsg.trim()) return
-    setPushSending(true)
-    const { data: profiles } = await supabase.from('profiles').select('id')
-    const notifications = (profiles || []).filter(p => p.id !== user.id).map(p => ({
-      to_uid:     p.id,
-      type:       'announcement',
-      title:      '📢 Team announcement',
-      body:       pushMsg.trim(),
-      nav_target: 'dashboard',
-      read:       false,
-    }))
-    if (notifications.length > 0) {
-      await supabase.from('notifications').insert(notifications)
-    }
-    setPushMsg('')
-    setPushSending(false)
-    setPushSent(true)
-    setTimeout(() => setPushSent(false), 3000)
+    const { data } = await supabase.from('settings').select('*')
+    const map = {}
+    ;(data || []).forEach(s => { map[s.key] = s.value })
+    setSettings(map)
+    setLoading(false)
   }
 
   async function save(key, value) {
@@ -65,8 +36,8 @@ export default function AdminSettings({ user }) {
 
   if (loading) return <Spinner />
 
-  const standupOn       = settings['standup_enabled'] !== 'false'
-  const announcementOn  = settings['announcement_active'] === 'true'
+  const standupOn      = settings['standup_enabled'] !== 'false'
+  const announcementOn = settings['announcement_active'] === 'true'
 
   return (
     <div style={{ padding:22 }}>
@@ -97,127 +68,111 @@ export default function AdminSettings({ user }) {
           </Field>
         </Card>
 
-        {/* Morning standup */}
-        <Card>
-          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
-            Morning check-in
-          </div>
-          <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:14, lineHeight:1.5 }}>
-            Controls whether the mood standup widget shows on the dashboard each morning.
-          </div>
-          <div style={{ display:'flex', gap:8, marginBottom:10 }}>
-            <Btn
-              sm
-              variant={standupOn ? undefined : 'outline'}
-              onClick={() => save('standup_enabled', 'true')}
-            >
-              Enable
-            </Btn>
-            <Btn
-              sm
-              variant={standupOn ? 'outline' : 'danger'}
-              onClick={() => save('standup_enabled', 'false')}
-            >
-              Disable
-            </Btn>
-          </div>
-          <div style={{ fontSize:11, color:'var(--text-4)' }}>
-            Currently: {standupOn ? '🟢 Enabled' : '🔴 Disabled'}
-          </div>
-        </Card>
-
         {/* Quote of the day */}
-        <Card style={{ gridColumn:'1 / -1' }}>
+        <Card>
           <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
             Quote of the day
             <SavedBadge show={saved['quote_text']} />
           </div>
           <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12, lineHeight:1.5 }}>
-            Shown in the navy card on the dashboard. Saving archives the previous quote to the history log.
+            The inspirational quote shown on the dashboard. Edit it inline on the dashboard or here.
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 220px', gap:10 }}>
-            <Field label="Quote text" mb={0}>
-              <textarea
-                key={settings['quote_text']}
-                defaultValue={settings['quote_text'] || ''}
-                onBlur={e => save('quote_text', e.target.value)}
-                rows={2}
-                style={{ ...IS, resize:'none', lineHeight:1.5 }}
-                placeholder="Enter an inspiring quote…"
-              />
-            </Field>
-            <Field label="Author (optional)" mb={0}>
-              <input
-                key={settings['quote_author']}
-                defaultValue={settings['quote_author'] || ''}
-                onBlur={e => save('quote_author', e.target.value)}
-                style={IS}
-                placeholder="— Author"
-              />
-            </Field>
+          <Field label="Quote text">
+            <input style={IS} defaultValue={settings['quote_text'] || ''} onBlur={e => save('quote_text', e.target.value)} placeholder="Make today count." />
+          </Field>
+          <Field label="Author" mb={0}>
+            <input style={IS} defaultValue={settings['quote_author'] || ''} onBlur={e => save('quote_author', e.target.value)} placeholder="Unknown" />
+          </Field>
+        </Card>
+
+        {/* Morning standup */}
+        <Card>
+          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
+            Morning check-in
+            <SavedBadge show={saved['standup_enabled']} />
+          </div>
+          <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12, lineHeight:1.5 }}>
+            The daily mood check-in on the dashboard. Responses are anonymous to agents, visible to admins.
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <button
+              onClick={() => save('standup_enabled', String(!standupOn))}
+              style={{ padding:'6px 16px', borderRadius:8, border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:500, background: standupOn ? N : 'var(--surface-3)', color: standupOn ? '#fff' : 'var(--text-3)' }}
+            >
+              {standupOn ? '✓ Enabled' : 'Disabled'}
+            </button>
+            <span style={{ fontSize:11, color:'var(--text-4)' }}>Click to toggle</span>
           </div>
         </Card>
 
-        {/* Announcement */}
-        <Card style={{ gridColumn:'1 / -1' }}>
+        {/* Announcement banner */}
+        <Card>
           <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
-            Team announcement
+            Announcement banner
             <SavedBadge show={saved['announcement_text']} />
           </div>
           <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12, lineHeight:1.5 }}>
-            The navy banner shown at the top of the dashboard. Team members can dismiss it per session. Toggle it off to hide without deleting the text.
+            Shows a dismissible banner at the top of the dashboard for the whole team. You can also edit it inline on the dashboard.
           </div>
           <Field label="Announcement text">
-            <input
-              key={settings['announcement_text']}
-              defaultValue={settings['announcement_text'] || ''}
-              onBlur={e => save('announcement_text', e.target.value)}
-              style={IS}
-              placeholder="e.g. Team meeting Friday at 2pm!"
-            />
+            <input style={IS} defaultValue={settings['announcement_text'] || ''} onBlur={e => save('announcement_text', e.target.value)} placeholder="e.g. Team meeting at 3pm today!" />
           </Field>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-            <Btn
-              sm
-              variant={announcementOn ? undefined : 'outline'}
-              onClick={() => save('announcement_active', 'true')}
+            <button
+              onClick={() => save('announcement_active', String(!announcementOn))}
+              style={{ padding:'5px 12px', borderRadius:7, border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:11, fontWeight:500, background: announcementOn ? N : 'var(--surface-3)', color: announcementOn ? '#fff' : 'var(--text-3)' }}
             >
-              Show banner
-            </Btn>
-            <Btn
-              sm
-              variant={announcementOn ? 'outline' : 'danger'}
-              onClick={() => save('announcement_active', 'false')}
-            >
-              Hide banner
-            </Btn>
-            <span style={{ fontSize:11, color:'var(--text-4)' }}>
-              Currently: {announcementOn ? '🟢 Visible to team' : '🔴 Hidden'}
-            </span>
+              {announcementOn ? '✓ Active' : 'Inactive'}
+            </button>
+            <span style={{ fontSize:11, color:'var(--text-4)' }}>Toggle to show/hide on dashboard</span>
           </div>
         </Card>
 
-        {/* Bulk push notification */}
+        {/* Google review link — NEW */}
         <Card style={{ gridColumn:'1 / -1' }}>
           <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
-            Send team push notification
-            {pushSent && <span style={{ fontSize:11, color:'var(--success)', marginLeft:8, fontWeight:500 }}>✓ Sent to team!</span>}
+            Google review link
+            <SavedBadge show={saved['google_review_link']} />
           </div>
           <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12, lineHeight:1.5 }}>
-            Sends an instant notification to all team members who are currently connected. This shows as a bell alert AND triggers a browser popup (if notifications are enabled). This is separate from the dashboard banner above.
+            Your agency's Google Business review link. Once saved, it auto-fills the review templates and the "Review link" generator button on the Reviews page. Get this link from your Google Business Profile.
           </div>
-          <Field label="Message">
+          <Field label="Google review URL" mb={0}>
             <input
               style={IS}
-              value={pushMsg}
-              onChange={e => setPushMsg(e.target.value)}
-              placeholder="e.g. Reminder: team meeting starts in 10 minutes!"
-              onKeyDown={e => { if (e.key === 'Enter') sendBulkPush() }}
+              type="url"
+              defaultValue={settings['google_review_link'] || ''}
+              onBlur={e => save('google_review_link', e.target.value)}
+              placeholder="https://g.page/r/YOUR_BUSINESS_ID/review"
             />
           </Field>
-          <Btn onClick={sendBulkPush} disabled={pushSending || !pushMsg.trim()}>
-            {pushSending ? 'Sending…' : '📢 Send to team'}
-          </Btn>
+          {settings['google_review_link'] && (
+            <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ width:8, height:8, borderRadius:'50%', background:'var(--success)' }} />
+              <span style={{ fontSize:11, color:'var(--success)' }}>Link is set and active</span>
+              <a href={settings['google_review_link']} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:N, textDecoration:'none', marginLeft:4 }}>Test link →</a>
+            </div>
+          )}
+        </Card>
+
+        {/* Learning — video link field */}
+        <Card style={{ gridColumn:'1 / -1' }}>
+          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
+            Learning section — video upload link
+            <SavedBadge show={saved['learning_video_link']} />
+          </div>
+          <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12, lineHeight:1.5 }}>
+            The URL that agents click when uploading a video to Learning (Loom, YouTube, etc.). This appears as a helper link in the Learning section.
+          </div>
+          <Field label="Video hosting URL" mb={0}>
+            <input
+              style={IS}
+              type="url"
+              defaultValue={settings['learning_video_link'] || ''}
+              onBlur={e => save('learning_video_link', e.target.value)}
+              placeholder="https://loom.com or https://youtube.com"
+            />
+          </Field>
         </Card>
 
       </div>
