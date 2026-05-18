@@ -1,6 +1,7 @@
 // ============================================================
 // Castro Agency Hub — App Entry (routing shell)
 // Place this file at: src/App.jsx
+// Batch 1: added NotificationHistory route
 // ============================================================
 import './styles/theme.css'
 import { useState, useEffect } from 'react'
@@ -24,68 +25,73 @@ import Profiles              from './components/Profiles'
 import Suggestions           from './components/Suggestions'
 import AdminSettings         from './components/AdminSettings'
 import AuditLog              from './components/AuditLog'
+import NotificationHistory   from './components/NotificationHistory'
 import { Spinner }           from './components/shared'
 
 const PAGES = {
-  dashboard:     Dashboard,
-  tasks:         Tasks,
-  referrals:     Referrals,
-  reviews:       Reviews,
-  sales:         Sales,
-  'live-leads':  LiveLeads,
-  cancellations: Cancellations,
-  renewals:      Renewals,
-  learning:      Learning,
-  profiles:      Profiles,
-  suggestions:   Suggestions,
-  settings:      AdminSettings,
-  'audit-log':   AuditLog,
+  dashboard:                Dashboard,
+  tasks:                    Tasks,
+  referrals:                Referrals,
+  reviews:                  Reviews,
+  sales:                    Sales,
+  'live-leads':             LiveLeads,
+  cancellations:            Cancellations,
+  renewals:                 Renewals,
+  learning:                 Learning,
+  profiles:                 Profiles,
+  suggestions:              Suggestions,
+  settings:                 AdminSettings,
+  'audit-log':              AuditLog,
+  'notification-history':   NotificationHistory,
 }
 
-// These pages stay mounted once visited so navigating back is instant
+// These pages stay mounted once visited so navigation is instant
 const PERSISTENT_PAGES = ['chat', 'dms']
 
 export default function App() {
-  const [session,       setSession]       = useState(null)
-  const [profile,       setProfile]       = useState(null)
-  const [loading,       setLoading]       = useState(true)
-  const [page,          setPage]          = useState('dashboard')
-  const [darkMode,      setDarkMode]      = useState(false)
-  const [visitedPages,  setVisitedPages]  = useState(() => new Set(['dashboard']))
-  const [dmTarget,      setDmTarget]      = useState(null)  // profile id to auto-open in DMs
+  const [session,      setSession]      = useState(null)
+  const [profile,      setProfile]      = useState(null)
+  const [page,         setPage]         = useState('dashboard')
+  const [loading,      setLoading]      = useState(true)
+  const [darkMode,     setDarkMode]     = useState(false)
+  const [dmTarget,     setDmTarget]     = useState(null)
+  const [visitedPages, setVisitedPages] = useState(new Set(['dashboard']))
 
-  // Track visited pages so persistent pages mount on first visit and stay mounted
+  // Track visited persistent pages so they stay mounted
   useEffect(() => {
-    setVisitedPages(prev => new Set([...prev, page]))
+    if (PERSISTENT_PAGES.includes(page)) {
+      setVisitedPages(prev => new Set([...prev, page]))
+    }
   }, [page])
 
-  // ── Auth ───────────────────────────────────────────────────
+  // Apply dark mode class to document
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    if (darkMode) document.documentElement.classList.add('dark')
+    else          document.documentElement.classList.remove('dark')
+  }, [darkMode])
+
+  useEffect(() => {
+    // Check existing session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session)
-      if (session) fetchProfile(session.user.email)
+      if (session) await loadProfile(session.user.email)
       else setLoading(false)
     })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session)
-      if (session) fetchProfile(session.user.email)
+      if (session) await loadProfile(session.user.email)
       else { setProfile(null); setLoading(false) }
     })
     return () => subscription.unsubscribe()
   }, [])
 
-  // ── Dark mode class on <html> ──────────────────────────────
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode)
-  }, [darkMode])
-
-  async function fetchProfile(email) {
-    setLoading(true)
-    const { data, error } = await supabase.from('profiles').select('*').eq('email', email).single()
-    if (error) console.error('[App] Profile fetch error:', error)
+  async function loadProfile(email) {
+    const { data } = await supabase.from('profiles').select('*').eq('email', email).single()
     if (data) {
       setProfile(data)
-      setDarkMode(data.dark_mode || false)
+      setDarkMode(data.dark_mode === true)
     }
     setLoading(false)
   }
@@ -93,7 +99,7 @@ export default function App() {
   async function toggleDarkMode() {
     const next = !darkMode
     setDarkMode(next)
-    if (profile?.id) {
+    if (profile) {
       await supabase.from('profiles').update({ dark_mode: next }).eq('id', profile.id)
     }
   }
@@ -111,25 +117,6 @@ export default function App() {
     setDmTarget(profileId)
     setPage('dms')
   }
-
-  // ── Browser tab badge ──────────────────────────────────────
-  useEffect(() => {
-    if (!profile) return
-    async function updateBadge() {
-      const [dm, notif] = await Promise.all([
-        supabase.from('direct_messages').select('*', { count:'exact', head:true }).eq('to_uid', profile.id).eq('read', false),
-        supabase.from('notifications').select('*', { count:'exact', head:true }).eq('to_uid', profile.id).eq('read', false),
-      ])
-      const total = (dm.count || 0) + (notif.count || 0)
-      document.title = total > 0 ? `(${total}) Castro Agency Hub` : 'Castro Agency Hub'
-    }
-    updateBadge()
-    const ch = supabase.channel('tab_badge_watch')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'direct_messages', filter: `to_uid=eq.${profile.id}` }, updateBadge)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications',   filter: `to_uid=eq.${profile.id}` }, updateBadge)
-      .subscribe()
-    return () => { supabase.removeChannel(ch); document.title = 'Castro Agency Hub' }
-  }, [profile?.id])
 
   // ── Loading screen ─────────────────────────────────────────
   if (loading) {
@@ -179,12 +166,7 @@ export default function App() {
           {/* ── Persistent pages: keep mounted, show/hide with CSS ── */}
           {/* Chat */}
           {visitedPages.has('chat') && (
-            <div style={{
-              display:        page === 'chat' ? 'flex' : 'none',
-              flexDirection:  'column',
-              height:         '100%',
-              overflow:       'hidden',
-            }}>
+            <div style={{ display: page === 'chat' ? 'flex' : 'none', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
               <ErrorBoundary>
                 <Chat user={profile} setPage={setPage} darkMode={darkMode} />
               </ErrorBoundary>
@@ -193,12 +175,7 @@ export default function App() {
 
           {/* Direct Messages */}
           {visitedPages.has('dms') && (
-            <div style={{
-              display:        page === 'dms' ? 'flex' : 'none',
-              flexDirection:  'column',
-              height:         '100%',
-              overflow:       'hidden',
-            }}>
+            <div style={{ display: page === 'dms' ? 'flex' : 'none', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
               <ErrorBoundary>
                 <DirectMessages
                   user={profile}
