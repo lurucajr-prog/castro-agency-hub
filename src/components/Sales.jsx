@@ -1,9 +1,13 @@
+// ============================================================
+// Castro Agency Hub — Sales
+// Place this file at: src/components/Sales.jsx
+// ============================================================
 import { useState, useEffect } from 'react'
-import { supabase }                  from '../lib/supabase'
+import { supabase }                    from '../lib/supabase'
 import { N, R, Card, Btn, Field, Modal, Chip, Spinner, TabBar, EmptyState, IS, MiniBar, pct, pcol, ConfirmModal } from './shared'
 import { launchConfetti, playFanfare } from '../utils/animations'
-import { logAudit }                   from '../utils/db'
-import { exportCSV }                  from '../utils/csv'
+import { logAudit }                    from '../utils/db'
+import { exportCSV }                   from '../utils/csv'
 
 const MEDALS = ['🥇','🥈','🥉','4','5','6','7']
 
@@ -15,11 +19,7 @@ const ITEM_TYPES = [
 
 const ITEMS_ADDED_TYPES = ['Vehicle','Driver','Property','Jewelry / Valuables','Other']
 
-const LEAD_SOURCES  = ['BP', 'EverQuote', 'Allstate Lead Marketplace', 'Other']
-const LEAD_RETURN_REASONS = [
-  'Disconnected', 'Wrong Number', 'No Answer', 'Bad Lead Info',
-  'Already Has Insurance', 'Duplicate', 'Called Too Late', 'Other',
-]
+const LEAD_SOURCES  = ['BP','Allstate Lead Marketplace','Other']
 const LEAD_STATUSES = ['New','Contacted','Quoted','Sold','Lost']
 const LEAD_STATUS_COLORS = {
   'New':       { bg:'#f3f4f6', tx:'#374151' },
@@ -30,12 +30,29 @@ const LEAD_STATUS_COLORS = {
 }
 const LEAD_SOURCE_COLORS = {
   'BP':                        { bg:'#ede9fe', tx:'#5b21b6' },
-  'EverQuote':                 { bg:'#dcfce7', tx:'#166534' },
   'Allstate Lead Marketplace': { bg:'#dbeafe', tx:'#1e40af' },
   'Other':                     { bg:'#f3f4f6', tx:'#374151' },
 }
 
 // ── Helpers ───────────────────────────────────────────────────
+function currentMonthKey() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}`
+}
+
+function getMonthOpts() {
+  const opts = []
+  const now  = new Date()
+  for (let i = 0; i < 12; i++) {
+    const d     = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`
+    const label = d.toLocaleDateString('en-US', { month:'long', year:'numeric' })
+    opts.push({ value, label })
+  }
+  return opts
+}
+const MONTH_OPTS = getMonthOpts()
+
 function calcStreak(sales, uid) {
   const dates = new Set(sales.filter(s => s.uid === uid).map(s => new Date(s.created_at).toDateString()))
   let streak = 0; const d = new Date()
@@ -44,212 +61,130 @@ function calcStreak(sales, uid) {
   return streak
 }
 
-function getMonthOptions() {
-  const opts = []
-  const now  = new Date()
-  for (let i = 0; i < 13; i++) {
-    const d     = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
-    opts.push({ value, label })
-  }
-  return opts
-}
-
-const MONTH_OPTS = getMonthOptions()
-
-function currentMonthKey() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-}
+function fmt(n) { return Number(n || 0).toLocaleString() }
 
 // ── Sale toast ────────────────────────────────────────────────
-function SaleToast({ client, premium, split, partner, policyType, userId, userName, onDone }) {
-  const [reviewDone, setReviewDone] = useState(false)
-  const [logging,    setLogging]    = useState(false)
-
-  useEffect(() => { const t = setTimeout(onDone, 6000); return () => clearTimeout(t) }, [])
-
-  async function logReview() {
-    setLogging(true)
-    await supabase.from('reviews').insert({
-      client,
-      policy_type: policyType || 'Auto',
-      trigger_type: 'New Policy',
-      method: 'Text',
-      result: 'Pending',
-      asked_by_name: userName,
-      asked_by_uid: userId,
-    })
-    setReviewDone(true)
-    setLogging(false)
-  }
-
+function SaleToast({ sale, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t) }, [])
   return (
-    <div style={{ position:'fixed', top:80, left:'50%', transform:'translateX(-50%)', background:'var(--surface)', border:'2px solid #16a34a', borderRadius:16, padding:'18px 28px', zIndex:9998, textAlign:'center', boxShadow:'var(--shadow-lg)', animation:'toastIn .4s ease', minWidth:280 }}>
-      <div style={{ fontSize:36, marginBottom:6 }}>🎉</div>
-      <div style={{ fontSize:16, fontWeight:700, color:'#166534', marginBottom:3 }}>Sale logged!</div>
-      <div style={{ fontSize:13, color:'var(--text-2)', marginBottom: split ? 4 : 12 }}>
-        {client} · <strong style={{ color:'#166634' }}>${Number(premium).toLocaleString()}</strong>
-      </div>
-      {split && partner && (
-        <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:12 }}>Split 50/50 with {partner}</div>
-      )}
-      {/* Review suggestion */}
-      {!reviewDone ? (
-        <div style={{ borderTop:'1px solid var(--border)', paddingTop:10 }}>
-          <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:7 }}>Ask {client} for a review?</div>
-          <div style={{ display:'flex', gap:7, justifyContent:'center' }}>
-            <button onClick={logReview} disabled={logging} style={{ fontSize:11, fontWeight:600, color:'#fff', background:N, border:'none', borderRadius:7, padding:'5px 13px', cursor:'pointer', fontFamily:'inherit' }}>
-              {logging ? 'Logging…' : '⭐ Log review request'}
-            </button>
-            <button onClick={onDone} style={{ fontSize:11, color:'var(--text-3)', background:'none', border:'1px solid var(--border)', borderRadius:7, padding:'5px 10px', cursor:'pointer', fontFamily:'inherit' }}>
-              Skip
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ borderTop:'1px solid var(--border)', paddingTop:10, fontSize:12, color:'#166534', fontWeight:500 }}>
-          ✓ Review request logged
-        </div>
-      )}
+    <div style={{ position:'fixed', top:80, left:'50%', transform:'translateX(-50%)', background:'var(--surface)', border:'2px solid #16a34a', borderRadius:16, padding:'18px 32px', zIndex:9998, textAlign:'center', boxShadow:'var(--shadow-lg)', animation:'toastIn 0.4s ease', minWidth:260 }}>
+      <style>{`@keyframes toastIn{from{transform:translateX(-50%) translateY(-30px);opacity:0}to{transform:translateX(-50%) translateY(0);opacity:1}}`}</style>
+      <div style={{ fontSize:40, marginBottom:8 }}>🎯</div>
+      <div style={{ fontSize:17, fontWeight:700, color:'#166534', marginBottom:4 }}>Sale logged!</div>
+      <div style={{ fontSize:13, color:'var(--text-2)' }}>{sale.client} · ${Number(sale.premium).toLocaleString()}</div>
     </div>
   )
 }
 
-// ── Personal goal progress card (agents) ─────────────────────
+// ── My Goal Card (agent view) ─────────────────────────────────
 function MyGoalCard({ sales, acts, goals, userId, weekSales, weekActs }) {
-  const g       = goals[userId] || { policies:8, premium:10000, quotes:30, weekly_policies:2, weekly_premium:2500, weekly_quotes:8 }
-  const items   = sales.reduce((s, x) => s + (x.items || 1), 0)
-  const premium = sales.reduce((s, x) => s + (x.premium || 0), 0)
-  const quotes  = acts.filter(a => a.type === 'Quote').reduce((s, a) => s + a.count, 0)
-
+  const g        = goals[userId] || { policies:8, premium:10000, quotes:30, weekly_policies:2, weekly_premium:2500, weekly_quotes:8 }
+  const myItems  = sales.reduce((s, x) => s + (x.items || 1), 0)
+  const myPrem   = sales.reduce((s, x) => s + (x.premium || 0), 0)
+  const myQuotes = Math.max(0, acts.filter(a => a.type === 'Quote').reduce((s, a) => s + a.count, 0))
   const wItems   = weekSales.reduce((s, x) => s + (x.items || 1), 0)
-  const wPremium = weekSales.reduce((s, x) => s + (x.premium || 0), 0)
-  const wQuotes  = weekActs.filter(a => a.type === 'Quote').reduce((s, a) => s + a.count, 0)
+  const wPrem    = weekSales.reduce((s, x) => s + (x.premium || 0), 0)
+  const wQuotes  = Math.max(0, weekActs.filter(a => a.type === 'Quote').reduce((s, a) => s + a.count, 0))
 
   const rows = [
-    { label:'Items',   monthly:items,   mGoal:g.policies,         weekly:wItems,   wGoal:g.weekly_policies  || 2 },
-    { label:'Premium', monthly:premium, mGoal:g.premium,          weekly:wPremium, wGoal:g.weekly_premium   || 2500, dollar:true },
-    { label:'Quotes',  monthly:quotes,  mGoal:g.quotes,           weekly:wQuotes,  wGoal:g.weekly_quotes    || 8 },
+    { label:'Items',   monthly:myItems,  weekly:wItems,  mGoal:g.policies||8,      wGoal:g.weekly_policies||2,    dollar:false },
+    { label:'Premium', monthly:myPrem,   weekly:wPrem,   mGoal:g.premium||10000,   wGoal:g.weekly_premium||2500,  dollar:true  },
+    { label:'Quotes',  monthly:myQuotes, weekly:wQuotes, mGoal:g.quotes||30,       wGoal:g.weekly_quotes||8,      dollar:false },
   ]
 
-  const fmt = v => v.toLocaleString()
-
   return (
-    <Card mb={14} style={{ background:'var(--primary-light)', border:'1px solid var(--primary-mid)' }}>
-      <div style={{ fontSize:12, fontWeight:600, color:'var(--primary)', marginBottom:12 }}>Your progress this month</div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10 }}>
-        {rows.map(r => {
-          const p = pct(r.monthly, r.mGoal)
-          return (
-            <div key={r.label} style={{ background:'var(--surface)', borderRadius:8, padding:'10px 12px' }}>
-              <div style={{ fontSize:10, color:'var(--text-4)', fontWeight:500, textTransform:'uppercase', letterSpacing:.4, marginBottom:4 }}>{r.label}</div>
-              <div style={{ fontSize:20, fontWeight:700, color:pcol(r.monthly, r.mGoal), marginBottom:2 }}>
-                {r.dollar ? '$' : ''}{fmt(r.monthly)}
-              </div>
-              <div style={{ fontSize:10, color:'var(--text-3)', marginBottom:5 }}>
-                of {r.dollar ? '$' : ''}{fmt(r.mGoal)} goal · {p}%
-              </div>
-              <div style={{ height:4, background:'var(--surface-3)', borderRadius:99, marginBottom:6 }}>
-                <div style={{ width:Math.min(100,p)+'%', height:'100%', background:pcol(r.monthly, r.mGoal), borderRadius:99, transition:'width 0.4s ease' }} />
-              </div>
-              <div style={{ fontSize:10, color:'var(--text-4)' }}>
-                Week: {r.dollar ? '$' : ''}{fmt(r.weekly)} / {r.dollar ? '$' : ''}{fmt(r.wGoal)}
-              </div>
+    <Card mb={14}>
+      <div style={{ fontSize:12, fontWeight:600, color:'var(--text-1)', marginBottom:12 }}>My progress this month</div>
+      {rows.map(r => {
+        const p = r.mGoal > 0 ? Math.round(Math.min(100, r.monthly / r.mGoal * 100)) : 0
+        return (
+          <div key={r.label} style={{ marginBottom:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4, fontSize:11 }}>
+              <span style={{ color:'var(--text-2)', fontWeight:500 }}>{r.label}</span>
+              <span style={{ color:pcol(r.monthly, r.mGoal) }}>
+                {r.dollar ? '$' : ''}{fmt(r.monthly)} / {r.dollar ? '$' : ''}{fmt(r.mGoal)} goal · {p}%
+              </span>
             </div>
-          )
-        })}
-      </div>
+            <div style={{ height:4, background:'var(--surface-3)', borderRadius:99, marginBottom:4 }}>
+              <div style={{ width:p+'%', height:'100%', background:pcol(r.monthly, r.mGoal), borderRadius:99, transition:'width 0.4s ease' }} />
+            </div>
+            <div style={{ fontSize:10, color:'var(--text-4)' }}>
+              Week: {r.dollar ? '$' : ''}{fmt(r.weekly)} / {r.dollar ? '$' : ''}{fmt(r.wGoal)}
+            </div>
+          </div>
+        )
+      })}
     </Card>
   )
 }
 
+// ── Main export ───────────────────────────────────────────────
 export default function Sales({ user }) {
-  const [tab,            setTab]           = useState('Leaderboard')
-  const [sales,          setSales]         = useState([])
-  const [allSales,       setAllSales]      = useState([])
-  const [acts,           setActs]          = useState([])
-  const [goals,          setGoals]         = useState({})
-  const [leads,          setLeads]         = useState([])
-  const [itemsAdded,     setItemsAdded]    = useState([])
-  const [profiles,       setProfiles]      = useState([])
-  const [loading,        setLoading]       = useState(true)
-  const [selectedMonth,  setSelectedMonth] = useState(currentMonthKey)
+  const [tab,           setTab]          = useState('Leaderboard')
+  const [sales,         setSales]        = useState([])
+  const [allSales,      setAllSales]     = useState([])
+  const [acts,          setActs]         = useState([])
+  const [goals,         setGoals]        = useState({})
+  const [leads,         setLeads]        = useState([])
+  const [itemsAdded,    setItemsAdded]   = useState([])
+  const [profiles,      setProfiles]     = useState([])
+  const [loading,       setLoading]      = useState(true)
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey)
 
   // Forms
-  const [editGoal,   setEditGoal]   = useState(null)
-  const [gForm,      setGForm]      = useState({ monthly_items:'', monthly_premium:'', monthly_quotes:'', weekly_items:'', weekly_premium:'', weekly_quotes:'' })
-  const [sForm,      setSForm]      = useState({ uid:'', client:'', pt:'Auto', premium:'', items:1 })
-  const [iaForm,     setIaForm]     = useState({ uid:'', client:'', item_type:'Vehicle', notes:'' })
-  const [lForm,      setLForm]      = useState({ name:'', phone:'', source:'BP', return_reason:'Disconnected' })
-  const [saving,     setSaving]     = useState(false)
-
-  // Split sale
-  const [splitSale,      setSplitSale]      = useState(false)
-  const [splitPartnerUid,setSplitPartnerUid] = useState('')
-
-  // All-time leaderboard
-  const [lbView,       setLbView]       = useState('month')  // 'month' | 'alltime'
-  const [allTimeSales, setAllTimeSales] = useState([])
+  const [editGoal,  setEditGoal]  = useState(null)
+  const [gForm,     setGForm]     = useState({ monthly_items:'', monthly_premium:'', monthly_quotes:'', weekly_items:'', weekly_premium:'', weekly_quotes:'' })
+  const [sForm,     setSForm]     = useState({ uid:'', client:'', pt:'Auto', premium:'', items:1 })
+  const [iaForm,    setIaForm]    = useState({ uid:'', client:'', item_type:'Vehicle', notes:'' })
+  const [lForm,     setLForm]     = useState({ name:'', phone:'', source:'BP', notes:'' })
+  const [saving,    setSaving]    = useState(false)
 
   // Edit / delete sale
-  const [editingSale,   setEditingSale]   = useState(null)   // sale object
+  const [editingSale,   setEditingSale]   = useState(null)
   const [editSaleForm,  setEditSaleForm]  = useState({})
   const [savingEdit,    setSavingEdit]    = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(null)   // sale object to delete
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
-  // Lead filters
+  // Lead UI
   const [leadFilter,       setLeadFilter]       = useState('All')
   const [leadSourceFilter, setLeadSourceFilter] = useState('All')
-  const [leadExpanded,     setLeadExpanded]      = useState(null)
+  const [leadExpanded,     setLeadExpanded]     = useState(null)
 
   // UI
-  const [saleToast,    setSaleToast]    = useState(null)
-  const [showItemDef,  setShowItemDef]  = useState(false)
-  const [reviewLogged, setReviewLogged] = useState(false)
+  const [saleToast,   setSaleToast]   = useState(null)
+  const [showItemDef, setShowItemDef] = useState(false)
 
-  const isAdmin  = user.role === 'admin'
-  const now      = new Date()
+  const isAdmin = user.role === 'admin'
+  const now     = new Date()
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-  // Derive month bounds from selectedMonth
   const [selYear, selMonth] = selectedMonth.split('-').map(Number)
   const monthStart  = new Date(selYear, selMonth - 1, 1).toISOString()
   const monthEnd    = new Date(selYear, selMonth, 0, 23, 59, 59).toISOString()
   const isThisMonth = selectedMonth === currentMonthKey()
   const monthLabel  = new Date(selYear, selMonth - 1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' })
 
-  // Week start (always current week regardless of selected month)
-  const day = now.getDay(); const diff = now.getDate() - day + (day === 0 ? -6 : 1)
+  const day = now.getDay()
+  const diff = now.getDate() - day + (day === 0 ? -6 : 1)
   const weekStart = new Date(now); weekStart.setDate(diff); weekStart.setHours(0,0,0,0)
   const weekStartISO = weekStart.toISOString()
 
-  useEffect(() => {
-    fetchStaticData()
-  }, [])
+  useEffect(() => { fetchStaticData() }, [])
+  useEffect(() => { fetchMonthData()  }, [selectedMonth])
 
-  useEffect(() => {
-    fetchMonthData()
-  }, [selectedMonth])
-
-  // Fetch data that doesn't depend on selected month
   async function fetchStaticData() {
-    const [g, p, l, allT] = await Promise.all([
+    const [g, p, l] = await Promise.all([
       supabase.from('goals').select('*'),
       supabase.from('profiles').select('*'),
       supabase.from('lead_returns').select('*').order('created_at', { ascending:false }),
-      supabase.from('sales').select('uid, premium, items, created_at').order('created_at', { ascending: false }),
     ])
     const gMap = {}; (g.data || []).forEach(x => { gMap[x.uid] = x })
     setGoals(gMap)
     setProfiles(p.data || [])
     setLeads(l.data || [])
-    setAllTimeSales(allT.data || [])
     setLoading(false)
   }
 
-  // Fetch month-specific data (re-runs when selectedMonth changes)
   async function fetchMonthData() {
     const [s, allS, a, ia] = await Promise.all([
       supabase.from('sales').select('*').gte('created_at', monthStart).lte('created_at', monthEnd).order('created_at', { ascending:false }),
@@ -278,38 +213,35 @@ export default function Sales({ user }) {
     setSaving(true)
     const uid       = isAdmin ? sForm.uid : user.id
     const itemCount = Math.max(1, Number(sForm.items) || 1)
-    const fullPrem  = Number(sForm.premium)
+    const { data, error } = await supabase.from('sales')
+      .insert({ uid, client:sForm.client, policy_type:sForm.pt, premium:Number(sForm.premium), items:itemCount })
+      .select().single()
+    if (error) { console.error('[Sales] add error', error); setSaving(false); return }
+    if (data) {
+      setSales(ss => [data, ...ss])
+      launchConfetti()
+      playFanfare()
+      setSaleToast({ client:sForm.client, premium:sForm.premium })
+      await logAudit({ user, action:'INSERT', table:'sales', record_id:data.id, new_data:data })
 
-    if (splitSale && splitPartnerUid && splitPartnerUid !== uid) {
-      // Insert two records at half premium each
-      const halfPrem        = Math.round(fullPrem / 2 * 100) / 100
-      const partnerProfile  = profiles.find(p => p.id === splitPartnerUid)
-      const halfItems       = Math.max(1, Math.ceil(itemCount / 2))
-
-      const [r1, r2] = await Promise.all([
-        supabase.from('sales').insert({ uid, client:sForm.client, policy_type:sForm.pt, premium:halfPrem, items:halfItems, is_split:true, split_partner_uid:splitPartnerUid, split_partner_name:partnerProfile?.name || null }).select().single(),
-        supabase.from('sales').insert({ uid:splitPartnerUid, client:sForm.client, policy_type:sForm.pt, premium:halfPrem, items:halfItems, is_split:true, split_partner_uid:uid, split_partner_name:profiles.find(p=>p.id===uid)?.name || null }).select().single(),
-      ])
-      if (r1.data) { setSales(ss => [r1.data, ...ss]); await logAudit({ user, action:'INSERT', table:'sales', record_id:r1.data.id, new_data:r1.data }) }
-      if (r2.data) { setSales(ss => [r2.data, ...ss]); await logAudit({ user, action:'INSERT', table:'sales', record_id:r2.data.id, new_data:r2.data }) }
-      launchConfetti(); playFanfare()
-      setSaleToast({ client:sForm.client, premium:fullPrem, split:true, partner:partnerProfile?.name })
-    } else {
-      // Normal single sale
-      const { data, error } = await supabase.from('sales')
-        .insert({ uid, client:sForm.client, policy_type:sForm.pt, premium:fullPrem, items:itemCount })
-        .select().single()
-      if (error) { console.error('[Sales] add error', error); setSaving(false); return }
-      if (data) {
-        setSales(ss => [data, ...ss])
-        launchConfetti(); playFanfare()
-        setSaleToast({ client:sForm.client, premium:sForm.premium, policyType:sForm.pt })
-        await logAudit({ user, action:'INSERT', table:'sales', record_id:data.id, new_data:data })
+      // Notify all teammates (mandatory — no opt-out)
+      const agentProfile = profiles.find(p => p.id === uid)
+      const agentName    = agentProfile?.name || user.name
+      const notifPayload = profiles
+        .filter(p => p.id !== user.id)
+        .map(p => ({
+          to_uid:     p.id,
+          type:       'sale',
+          title:      `${agentName} just closed a sale! 🎯`,
+          body:       `${sForm.client} · ${sForm.pt} · $${Number(sForm.premium).toLocaleString()}`,
+          nav_target: 'sales',
+          read:       false,
+        }))
+      if (notifPayload.length > 0) {
+        await supabase.from('notifications').insert(notifPayload)
       }
     }
-
     setSForm(f => ({ ...f, client:'', premium:'', items:1 }))
-    setSplitSale(false); setSplitPartnerUid('')
     setSaving(false)
   }
 
@@ -333,8 +265,7 @@ export default function Sales({ user }) {
 
   // ── Delete sale ───────────────────────────────────────────────
   async function deleteSale(sale) {
-    const { error } = await supabase.from('sales').delete().eq('id', sale.id)
-    if (error) { console.error('[Sales] delete error', error); return }
+    await supabase.from('sales').delete().eq('id', sale.id)
     setSales(ss => ss.filter(s => s.id !== sale.id))
     await logAudit({ user, action:'DELETE', table:'sales', record_id:sale.id, old_data:sale })
     setConfirmDelete(null)
@@ -342,22 +273,34 @@ export default function Sales({ user }) {
 
   // ── Items added ───────────────────────────────────────────────
   async function addItemAdded() {
-    if (!iaForm.client.trim()) return; setSaving(true)
+    if (!iaForm.client.trim()) return
+    setSaving(true)
     const uid = isAdmin ? iaForm.uid : user.id
     const { data } = await supabase.from('items_added').insert({ uid, client:iaForm.client, item_type:iaForm.item_type, notes:iaForm.notes }).select().single()
     if (data) setItemsAdded(ii => [data, ...ii])
-    setIaForm(f => ({ ...f, client:'', notes:'' })); setSaving(false)
+    setIaForm(f => ({ ...f, client:'', notes:'' }))
+    setSaving(false)
   }
 
   // ── Lead returns ──────────────────────────────────────────────
   async function addLead() {
-    if (!lForm.name.trim() || !lForm.phone.trim()) return; setSaving(true)
+    if (!lForm.name.trim() || !lForm.phone.trim()) return
+    setSaving(true)
     const { data } = await supabase.from('lead_returns').insert({ ...lForm, logged_by:user.id, status:'New' }).select().single()
-    if (data) setLeads(ls => [data, ...ls]); setLForm({ name:'', phone:'', source:'BP', return_reason:'Disconnected' }); setSaving(false)
+    if (data) setLeads(ls => [data, ...ls])
+    setLForm({ name:'', phone:'', source:'BP', notes:'' })
+    setSaving(false)
   }
-  async function updateLeadStatus(id, status) { await supabase.from('lead_returns').update({ status }).eq('id', id); setLeads(ls => ls.map(l => l.id === id ? { ...l, status } : l)) }
-  async function updateLeadNotes(id, notes)   { await supabase.from('lead_returns').update({ notes }).eq('id', id); setLeads(ls => ls.map(l => l.id === id ? { ...l, notes } : l)) }
-  async function deleteLead(id)               { setConfirmDelete({ _type:'lead', id }) }
+
+  async function updateLeadStatus(id, status) {
+    await supabase.from('lead_returns').update({ status }).eq('id', id)
+    setLeads(ls => ls.map(l => l.id === id ? { ...l, status } : l))
+  }
+
+  async function updateLeadNotes(id, notes) {
+    await supabase.from('lead_returns').update({ notes }).eq('id', id)
+    setLeads(ls => ls.map(l => l.id === id ? { ...l, notes } : l))
+  }
 
   async function confirmLeadDelete(id) {
     await supabase.from('lead_returns').delete().eq('id', id)
@@ -365,42 +308,46 @@ export default function Sales({ user }) {
     setConfirmDelete(null)
   }
 
-  // ── Admin leaderboard toggle ──────────────────────────────────
-  async function toggleAdminLeaderboard(admin) {
-    const next = !admin.show_on_leaderboard
-    await supabase.from('profiles').update({ show_on_leaderboard: next }).eq('id', admin.id)
-    setProfiles(ps => ps.map(p => p.id === admin.id ? { ...p, show_on_leaderboard: next } : p))
-  }
-
   // ── Goals ─────────────────────────────────────────────────────
   async function saveGoal() {
     if (!editGoal) return
-    const payload = { uid:editGoal, policies:Number(gForm.monthly_items), premium:Number(gForm.monthly_premium), quotes:Number(gForm.monthly_quotes), weekly_policies:Number(gForm.weekly_items), weekly_premium:Number(gForm.weekly_premium), weekly_quotes:Number(gForm.weekly_quotes) }
+    const payload = {
+      uid:             editGoal,
+      policies:        Number(gForm.monthly_items),
+      premium:         Number(gForm.monthly_premium),
+      quotes:          Number(gForm.monthly_quotes),
+      weekly_policies: Number(gForm.weekly_items),
+      weekly_premium:  Number(gForm.weekly_premium),
+      weekly_quotes:   Number(gForm.weekly_quotes),
+    }
     const existing = goals[editGoal]
     if (existing?.id) await supabase.from('goals').update(payload).eq('id', existing.id)
     else await supabase.from('goals').insert(payload)
-    setGoals(g => ({ ...g, [editGoal]:{ ...payload, id:existing?.id } })); setEditGoal(null)
+    setGoals(g => ({ ...g, [editGoal]:{ ...payload, id:existing?.id } }))
+    setEditGoal(null)
   }
 
   function startEditGoal(uid) {
     const g = goals[uid] || { policies:8, premium:10000, quotes:30, weekly_policies:2, weekly_premium:2500, weekly_quotes:8 }
-    setGForm({ monthly_items:g.policies, monthly_premium:g.premium, monthly_quotes:g.quotes, weekly_items:g.weekly_policies||2, weekly_premium:g.weekly_premium||2500, weekly_quotes:g.weekly_quotes||8 })
+    setGForm({ monthly_items:g.policies||8, monthly_premium:g.premium||10000, monthly_quotes:g.quotes||30, weekly_items:g.weekly_policies||2, weekly_premium:g.weekly_premium||2500, weekly_quotes:g.weekly_quotes||8 })
     setEditGoal(uid)
   }
 
   function autoFillWeekly() {
-    setGForm(f => ({ ...f, weekly_items:Math.ceil(Number(f.monthly_items)/4)||'', weekly_premium:Math.ceil(Number(f.monthly_premium)/4)||'', weekly_quotes:Math.ceil(Number(f.monthly_quotes)/4)||'' }))
+    setGForm(f => ({
+      ...f,
+      weekly_items:   Math.ceil(Number(f.monthly_items)   / 4) || '',
+      weekly_premium: Math.ceil(Number(f.monthly_premium) / 4) || '',
+      weekly_quotes:  Math.ceil(Number(f.monthly_quotes)  / 4) || '',
+    }))
   }
 
   if (loading) return <Spinner />
 
   const members = profiles.filter(p => p.role === 'member')
 
-  // Leaderboard participants: agents + any admins who toggled themselves on
-  const lbParticipants = profiles.filter(p => p.role === 'member' || (p.role === 'admin' && p.show_on_leaderboard))
-
   // Leaderboard data
-  const lbData = lbParticipants.map(m => {
+  const lbData = members.map(m => {
     const ms     = sales.filter(s => s.uid === m.id)
     const ma     = acts.filter(a => a.uid === m.id)
     const items  = ms.reduce((s, x) => s + (x.items || 1), 0)
@@ -414,15 +361,12 @@ export default function Sales({ user }) {
   const weekSales = sales.filter(s => s.created_at >= weekStartISO)
   const weekActs  = acts.filter(a => a.created_at >= weekStartISO)
 
-  const filteredLeads = leads
-    .filter(l => leadFilter === 'All' || l.status === leadFilter)
-    .filter(l => leadSourceFilter === 'All' || l.source === leadSourceFilter)
-  const leadCounts    = {}; LEAD_STATUSES.forEach(s => { leadCounts[s]    = leads.filter(l => l.status === s).length })
-  const leadSrcCounts = {}; LEAD_SOURCES.forEach(s  => { leadSrcCounts[s] = leads.filter(l => l.source === s).length })
+  const filteredLeads   = leads.filter(l => (leadFilter === 'All' || l.status === leadFilter) && (leadSourceFilter === 'All' || l.source === leadSourceFilter))
+  const leadCounts      = {}; LEAD_STATUSES.forEach(s => { leadCounts[s]    = leads.filter(l => l.status === s).length })
+  const leadSrcCounts   = {}; LEAD_SOURCES.forEach(s  => { leadSrcCounts[s] = leads.filter(l => l.source === s).length })
 
-  // My sales / acts for personal goal card
-  const mySales = sales.filter(s => s.uid === user.id)
-  const myActs  = acts.filter(a => a.uid === user.id)
+  const mySales     = sales.filter(s => s.uid === user.id)
+  const myActs      = acts.filter(a => a.uid === user.id)
   const myWeekSales = weekSales.filter(s => s.uid === user.id)
   const myWeekActs  = weekActs.filter(a => a.uid === user.id)
 
@@ -433,51 +377,29 @@ export default function Sales({ user }) {
     <>
       <div style={{ padding:20 }}>
 
-        {/* ── Header with month selector ── */}
+        {/* Header */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
           <div>
             <div style={{ fontSize:18, fontWeight:600, color:'var(--text-1)', marginBottom:2 }}>Sales tracker</div>
-            <div style={{ fontSize:12, color:'var(--text-3)' }}>
-              {isThisMonth ? 'This month' : 'Viewing archive'} · {monthLabel}
-            </div>
+            <div style={{ fontSize:12, color:'var(--text-3)' }}>{isThisMonth ? 'This month' : 'Viewing archive'} · {monthLabel}</div>
           </div>
-
-          {/* Right: export + month selector */}
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             {(isAdmin || sales.length > 0) && (
               <Btn sm variant="outline" onClick={() => {
                 const rows = sales.map(s => {
                   const agent = profiles.find(p => p.id === s.uid)
-                  return [
-                    new Date(s.created_at).toLocaleDateString('en-US'),
-                    agent?.name || 'Unknown',
-                    s.client,
-                    s.policy_type,
-                    s.premium,
-                    s.items || 1,
-                  ]
+                  return [new Date(s.created_at).toLocaleDateString('en-US'), agent?.name||'Unknown', s.client, s.policy_type, s.premium, s.items||1]
                 })
                 exportCSV(`sales-${selectedMonth}.csv`, ['Date','Agent','Client','Policy Type','Premium ($)','Items'], rows)
-              }}>
-                ⬇ Export CSV
-              </Btn>
+              }}>⬇ Export CSV</Btn>
             )}
             {!isThisMonth && (
-              <button
-                onClick={() => setSelectedMonth(currentMonthKey())}
-                style={{ fontSize:11, color:N, background:'var(--primary-light)', border:`1px solid ${N}`, borderRadius:7, padding:'5px 11px', cursor:'pointer', fontWeight:500 }}
-              >
+              <button onClick={() => setSelectedMonth(currentMonthKey())} style={{ fontSize:11, color:N, background:'var(--primary-light)', border:`1px solid ${N}`, borderRadius:7, padding:'5px 11px', cursor:'pointer', fontWeight:500 }}>
                 ← Back to current month
               </button>
             )}
-            <select
-              value={selectedMonth}
-              onChange={e => setSelectedMonth(e.target.value)}
-              style={{ ...IS, width:'auto', fontSize:12, fontWeight:500, color:'var(--text-1)' }}
-            >
-              {MONTH_OPTS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
+            <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ ...IS, width:'auto', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>
+              {MONTH_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
         </div>
@@ -487,81 +409,43 @@ export default function Sales({ user }) {
         {/* ── LEADERBOARD ── */}
         {tab === 'Leaderboard' && (
           <>
-            {/* Personal goal progress for agents */}
             {!isAdmin && (
-              <MyGoalCard
-                sales={mySales}
-                acts={myActs}
-                goals={goals}
-                userId={user.id}
-                weekSales={myWeekSales}
-                weekActs={myWeekActs}
-              />
+              <MyGoalCard sales={mySales} acts={myActs} goals={goals} userId={user.id} weekSales={myWeekSales} weekActs={myWeekActs} />
             )}
 
-            {/* Admin leaderboard visibility toggles -- admin eyes only */}
-            {isAdmin && (
-              <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:10, padding:'8px 12px', background:'var(--surface-2)', borderRadius:8, border:'1px solid var(--border)' }}>
-                <span style={{ fontSize:11, color:'var(--text-4)', fontWeight:500 }}>Include on leaderboard:</span>
-                {profiles.filter(p => p.role === 'admin').map(a => (
-                  <label key={a.id} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={!!a.show_on_leaderboard}
-                      onChange={() => toggleAdminLeaderboard(a)}
-                      style={{ width:14, height:14, cursor:'pointer', accentColor:N }}
-                    />
-                    <span style={{ fontSize:12, fontWeight:500, color:'var(--text-2)' }}>{a.name}</span>
-                  </label>
-                ))}
-                <span style={{ fontSize:10, color:'var(--text-4)', marginLeft:'auto', fontStyle:'italic' }}>Visible to everyone</span>
-              </div>
-            )}
-
-            {/* Month / All-time sub-tabs */}
-            <div style={{ display:'flex', gap:6, marginBottom:12 }}>
-              {['month', 'alltime'].map(v => (
-                <button key={v} onClick={() => setLbView(v)} style={{ padding:'5px 14px', borderRadius:7, border:`1px solid ${lbView===v ? N : 'var(--border)'}`, background: lbView===v ? N : 'var(--surface)', color: lbView===v ? '#fff' : 'var(--text-3)', fontSize:12, fontWeight: lbView===v ? 600 : 400, cursor:'pointer', fontFamily:'inherit' }}>
-                  {v === 'month' ? 'This month' : 'All-time'}
-                </button>
-              ))}
-            </div>
-
-            {lbView === 'month' ? (
-              <Card p={0}>
-                {lbData.length === 0 ? <EmptyState text="No sales data for this month." icon="📊" /> : (
+            <Card p={0}>
+              {lbData.length === 0 ? <EmptyState text="No sales data for this month." icon="🏆" /> : (
                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                   <thead>
                     <tr style={{ background:'var(--surface-2)' }}>
-                      {['#','Agent','Items sold','Premium','Quotes'].map(h => (
-                        <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
+                      {['Rank','Agent','Items','Premium','Quotes','Streak','Goal'].map(h => (
+                        <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {lbData.map(({ m, items, prem, quotes, g, streak }, i) => {
-                      const isMe = m.id === user.id
+                      const isMe   = m.id === user.id
+                      const premPct = g.premium > 0 ? Math.round(Math.min(100, prem / g.premium * 100)) : 0
                       return (
                         <tr key={m.id} style={{ borderTop:'1px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent' }}>
-                          <td style={{ padding:'11px 12px', fontSize:14 }}>{MEDALS[i] || (i+1)}</td>
-                          <td style={{ padding:'11px 12px' }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                              <div style={{ width:26, height:26, borderRadius:'50%', background: isMe ? 'var(--primary)' : 'var(--primary-mid)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:600, color: isMe ? '#fff' : '#1e40af' }}>{m.ini}</div>
-                              <div>
-                                <span style={{ fontSize:12, fontWeight: isMe ? 600 : 500, color:'var(--text-1)' }}>
-                                  {m.name}
-                                  {isMe && <span style={{ fontSize:9, color:'var(--primary)', fontWeight:700, marginLeft:5 }}>YOU</span>}
-                                </span>
-                                {streak > 0 && <div style={{ fontSize:10, color:'#d97706' }}>🔥 {streak}-day streak</div>}
-                              </div>
+                          <td style={{ padding:'9px 12px', fontSize:14 }}>{MEDALS[i] || (i+1)}</td>
+                          <td style={{ padding:'9px 12px' }}>
+                            <div style={{ fontSize:12, fontWeight:isMe?700:500, color:'var(--text-1)' }}>
+                              {m.name}{isMe && <span style={{ fontSize:9, color:N, marginLeft:5, fontWeight:700 }}>YOU</span>}
+                            </div>
+                            <div style={{ fontSize:10, color:'var(--text-4)' }}>{m.title}</div>
+                          </td>
+                          <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{items}</td>
+                          <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'#166534' }}>${prem.toLocaleString()}</td>
+                          <td style={{ padding:'9px 12px', fontSize:12, color:'var(--text-3)' }}>{quotes}</td>
+                          <td style={{ padding:'9px 12px', fontSize:12, color: streak>0?'#d97706':'var(--text-4)' }}>{streak > 0 ? `🔥 ${streak}d` : '—'}</td>
+                          <td style={{ padding:'9px 12px', minWidth:100 }}>
+                            <div style={{ fontSize:10, color:pcol(prem, g.premium), marginBottom:3 }}>{premPct}%</div>
+                            <div style={{ height:3, background:'var(--surface-3)', borderRadius:99 }}>
+                              <div style={{ width:premPct+'%', height:'100%', background:pcol(prem, g.premium), borderRadius:99, transition:'width 0.4s' }} />
                             </div>
                           </td>
-                          <td style={{ padding:'11px 12px', minWidth:90 }}><MiniBar val={items} max={g.policies || 8} /></td>
-                          <td style={{ padding:'11px 12px', minWidth:110 }}>
-                            <div style={{ fontSize:13, fontWeight:700, color:pcol(prem, g.premium || 10000), marginBottom:1 }}>${prem.toLocaleString()}</div>
-                            <div style={{ fontSize:10, color:'var(--text-4)' }}>{pct(prem, g.premium || 10000)}% of ${(g.premium || 10000).toLocaleString()}</div>
-                          </td>
-                          <td style={{ padding:'11px 12px', minWidth:85 }}><MiniBar val={Math.max(0, quotes)} max={g.quotes || 30} /></td>
                         </tr>
                       )
                     })}
@@ -569,71 +453,16 @@ export default function Sales({ user }) {
                 </table>
               )}
             </Card>
-            ) : (
-              /* ── ALL-TIME LEADERBOARD ── */
-              (() => {
-                const allTimeData = members.map(m => {
-                  const ms    = allTimeSales.filter(s => s.uid === m.id)
-                  const prem  = ms.reduce((s, x) => s + (x.premium || 0), 0)
-                  const items = ms.reduce((s, x) => s + (x.items || 1), 0)
-                  return { m, prem, items, count: ms.length }
-                }).sort((a, b) => b.prem - a.prem)
-                const MEDALS_AT = ['🥇','🥈','🥉','4','5','6','7']
-                return (
-                  <Card p={0}>
-                    {allTimeData.every(d => d.count === 0) ? <EmptyState text="No all-time sales data yet." icon="📊" /> : (
-                      <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                        <thead>
-                          <tr style={{ background:'var(--surface-2)' }}>
-                            {['#','Agent','Total items','Total premium','Sales logged'].map(h => (
-                              <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {allTimeData.map(({ m, prem, items, count }, i) => {
-                            const isMe = m.id === user.id
-                            return (
-                              <tr key={m.id} style={{ borderTop:'1px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent' }}>
-                                <td style={{ padding:'11px 12px', fontSize:14 }}>{MEDALS_AT[i] || (i+1)}</td>
-                                <td style={{ padding:'11px 12px' }}>
-                                  <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                                    <div style={{ width:26, height:26, borderRadius:'50%', background: isMe ? 'var(--primary)' : 'var(--primary-mid)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:9, fontWeight:600, color: isMe ? '#fff' : '#1e40af' }}>{m.ini}</div>
-                                    <span style={{ fontSize:12, fontWeight: isMe ? 600 : 500, color:'var(--text-1)' }}>
-                                      {m.name}{isMe && <span style={{ fontSize:9, color:'var(--primary)', fontWeight:700, marginLeft:5 }}>YOU</span>}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td style={{ padding:'11px 12px', fontSize:13, fontWeight:600, color:'var(--text-1)' }}>{items.toLocaleString()}</td>
-                                <td style={{ padding:'11px 12px', fontSize:13, fontWeight:700, color:'var(--success)' }}>${prem.toLocaleString()}</td>
-                                <td style={{ padding:'11px 12px', fontSize:12, color:'var(--text-3)' }}>{count.toLocaleString()}</td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    )}
-                  </Card>
-                )
-              })()
-            )}
           </>
         )}
 
         {/* ── LOG SALE ── */}
         {tab === 'Log sale' && (
           <Card>
-            {/* Archive notice */}
-            {!isThisMonth && (
-              <div style={{ background:'var(--warning-light)', border:'1px solid #fcd34d', borderRadius:8, padding:'9px 13px', marginBottom:14, fontSize:12, color:'#92400e', fontWeight:500 }}>
-                📅 You are viewing {monthLabel}. To log a new sale, switch back to the current month.
-              </div>
-            )}
-
             {isThisMonth && (
               <>
-                <div style={{ fontSize:13, fontWeight:500, color:'var(--text-1)', marginBottom:12 }}>Log a sale</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+                <div style={{ fontSize:13, fontWeight:500, color:'var(--text-1)', marginBottom:12 }}>Log a new sale</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
                   {isAdmin && (
                     <Field label="Agent">
                       <select style={IS} value={sForm.uid} onChange={e => setSForm(f => ({ ...f, uid:e.target.value }))}>
@@ -675,56 +504,32 @@ export default function Sales({ user }) {
                 )}
 
                 <Btn onClick={addSale} disabled={saving}>{saving ? 'Saving…' : '🎯 Log sale'}</Btn>
-
-                {/* Split sale toggle */}
-                <div style={{ marginTop:10, padding:'10px 12px', background:'var(--surface-2)', borderRadius:8, border:'1px solid var(--border)' }}>
-                  <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, fontWeight:500, color:'var(--text-2)' }}>
-                    <input type="checkbox" checked={splitSale} onChange={e => { setSplitSale(e.target.checked); setSplitPartnerUid('') }} style={{ width:14, height:14, cursor:'pointer' }} />
-                    Split sale — share credit with another agent (50/50)
-                  </label>
-                  {splitSale && (
-                    <div style={{ marginTop:8 }}>
-                      <select style={IS} value={splitPartnerUid} onChange={e => setSplitPartnerUid(e.target.value)}>
-                        <option value="">Select split partner…</option>
-                        {members.filter(m => m.id !== (isAdmin ? sForm.uid : user.id)).map(m => (
-                          <option key={m.id} value={m.id}>{m.name}</option>
-                        ))}
-                      </select>
-                      {splitPartnerUid && sForm.premium && (
-                        <div style={{ fontSize:11, color:'var(--text-3)', marginTop:6 }}>
-                          Each agent will receive <strong>${(Math.round(Number(sForm.premium) / 2 * 100) / 100).toLocaleString()}</strong> in premium credit
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
               </>
             )}
 
-            {/* Recent / archive sales list */}
             {sales.length > 0 && (
               <div style={{ marginTop:16 }}>
                 <div style={{ fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>
                   {isThisMonth ? 'Recent sales' : `All sales — ${monthLabel}`}
                 </div>
                 {sales.map(s => {
-                  const m = profiles.find(p => p.id === s.uid)
+                  const m       = profiles.find(p => p.id === s.uid)
                   const canEdit = isAdmin || s.uid === user.id
                   return (
                     <div key={s.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
                       <div>
                         <div style={{ fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{s.client}</div>
                         <div style={{ fontSize:11, color:'var(--text-3)' }}>
-                          {m?.name} · {new Date(s.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })} · {s.items || 1} item{(s.items || 1) !== 1 ? 's' : ''}
+                          {m?.name} · {new Date(s.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })} · {s.items||1} item{(s.items||1)!==1?'s':''}
                         </div>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                         <Chip label={s.policy_type} />
-                        <div style={{ fontSize:12, fontWeight:500, color:'#166534' }}>${(s.premium || 0).toLocaleString()}</div>
+                        <div style={{ fontSize:12, fontWeight:500, color:'#166534' }}>${(s.premium||0).toLocaleString()}</div>
                         {canEdit && (
                           <div style={{ display:'flex', gap:4 }}>
-                            <button onClick={() => openEditSale(s)} style={{ border:'none', background:'none', cursor:'pointer', color:'var(--text-4)', fontSize:13, padding:'2px 4px' }} title="Edit">✏️</button>
-                            <button onClick={() => setConfirmDelete(s)} style={{ border:'none', background:'none', cursor:'pointer', color:'#ef4444', fontSize:13, padding:'2px 4px' }} title="Delete">🗑</button>
+                            <button onClick={() => openEditSale(s)} style={{ border:'none', background:'none', cursor:'pointer', color:'var(--text-4)', fontSize:13, padding:'2px 4px' }}>✏️</button>
+                            <button onClick={() => setConfirmDelete(s)} style={{ border:'none', background:'none', cursor:'pointer', color:'#ef4444', fontSize:13, padding:'2px 4px' }}>🗑</button>
                           </div>
                         )}
                       </div>
@@ -746,10 +551,24 @@ export default function Sales({ user }) {
               <Card mb={14}>
                 <div style={{ fontSize:13, fontWeight:500, color:'var(--text-1)', marginBottom:12 }}>Log an item added</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-                  {isAdmin && <Field label="Agent"><select style={IS} value={iaForm.uid} onChange={e => setIaForm(f => ({ ...f, uid:e.target.value }))}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></Field>}
-                  <Field label="Client name *"><input style={IS} value={iaForm.client} onChange={e => setIaForm(f => ({ ...f, client:e.target.value }))} placeholder="e.g. Smith, John" /></Field>
-                  <Field label="What was added"><select style={IS} value={iaForm.item_type} onChange={e => setIaForm(f => ({ ...f, item_type:e.target.value }))}>{ITEMS_ADDED_TYPES.map(o => <option key={o}>{o}</option>)}</select></Field>
-                  <Field label="Notes"><input style={IS} value={iaForm.notes} onChange={e => setIaForm(f => ({ ...f, notes:e.target.value }))} placeholder="Optional…" /></Field>
+                  {isAdmin && (
+                    <Field label="Agent">
+                      <select style={IS} value={iaForm.uid} onChange={e => setIaForm(f => ({ ...f, uid:e.target.value }))}>
+                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                      </select>
+                    </Field>
+                  )}
+                  <Field label="Client name *">
+                    <input style={IS} value={iaForm.client} onChange={e => setIaForm(f => ({ ...f, client:e.target.value }))} placeholder="e.g. Smith, John" />
+                  </Field>
+                  <Field label="What was added">
+                    <select style={IS} value={iaForm.item_type} onChange={e => setIaForm(f => ({ ...f, item_type:e.target.value }))}>
+                      {ITEMS_ADDED_TYPES.map(o => <option key={o}>{o}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Notes">
+                    <input style={IS} value={iaForm.notes} onChange={e => setIaForm(f => ({ ...f, notes:e.target.value }))} placeholder="Optional…" />
+                  </Field>
                 </div>
                 <Btn onClick={addItemAdded} disabled={saving}>{saving ? 'Saving…' : '+ Log item'}</Btn>
               </Card>
@@ -757,16 +576,27 @@ export default function Sales({ user }) {
             <Card p={0}>
               {itemsAdded.length === 0 ? <EmptyState text={`No items logged for ${monthLabel}.`} icon="📋" /> : (
                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                  <thead><tr style={{ background:'var(--surface-2)' }}>{['Client','Item added','Agent','Date','Notes'].map(h => <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>)}</tr></thead>
-                  <tbody>{itemsAdded.map(item => { const m = profiles.find(p => p.id === item.uid); return (
-                    <tr key={item.id} style={{ borderTop:'1px solid var(--border)' }}>
-                      <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{item.client}</td>
-                      <td style={{ padding:'9px 12px' }}><span style={{ background:'var(--primary-mid)', color:'#1e40af', padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:500 }}>{item.item_type}</span></td>
-                      <td style={{ padding:'9px 12px', fontSize:12, color:'var(--text-3)' }}>{m?.name}</td>
-                      <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-4)' }}>{new Date(item.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })}</td>
-                      <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-3)' }}>{item.notes || '—'}</td>
+                  <thead>
+                    <tr style={{ background:'var(--surface-2)' }}>
+                      {['Client','Item added','Agent','Date','Notes'].map(h => (
+                        <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
+                      ))}
                     </tr>
-                  )})}</tbody>
+                  </thead>
+                  <tbody>
+                    {itemsAdded.map(item => {
+                      const m = profiles.find(p => p.id === item.uid)
+                      return (
+                        <tr key={item.id} style={{ borderTop:'1px solid var(--border)' }}>
+                          <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{item.client}</td>
+                          <td style={{ padding:'9px 12px' }}><span style={{ background:'var(--primary-mid)', color:'#1e40af', padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:500 }}>{item.item_type}</span></td>
+                          <td style={{ padding:'9px 12px', fontSize:12, color:'var(--text-3)' }}>{m?.name}</td>
+                          <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-4)' }}>{new Date(item.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })}</td>
+                          <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-3)' }}>{item.notes || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
                 </table>
               )}
             </Card>
@@ -784,95 +614,110 @@ export default function Sales({ user }) {
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
                       <Field label="Name *"><input style={IS} value={lForm.name} onChange={e => setLForm(f => ({ ...f, name:e.target.value }))} placeholder="e.g. John Smith" /></Field>
                       <Field label="Phone *"><input style={IS} value={lForm.phone} onChange={e => setLForm(f => ({ ...f, phone:e.target.value }))} placeholder="e.g. 708-555-0123" /></Field>
-                      <Field label="Source"><select style={IS} value={lForm.source} onChange={e => setLForm(f => ({ ...f, source:e.target.value }))}>{LEAD_SOURCES.map(s => <option key={s}>{s}</option>)}</select></Field>
-                      <Field label="Return reason">
-                        <select style={IS} value={lForm.return_reason} onChange={e => setLForm(f => ({ ...f, return_reason:e.target.value }))}>
-                          {LEAD_RETURN_REASONS.map(r => <option key={r}>{r}</option>)}
+                      <Field label="Source">
+                        <select style={IS} value={lForm.source} onChange={e => setLForm(f => ({ ...f, source:e.target.value }))}>
+                          {LEAD_SOURCES.map(s => <option key={s}>{s}</option>)}
                         </select>
                       </Field>
+                      <Field label="Notes"><input style={IS} value={lForm.notes} onChange={e => setLForm(f => ({ ...f, notes:e.target.value }))} placeholder="Optional context…" /></Field>
                     </div>
                     <Btn onClick={addLead} disabled={saving}>{saving ? 'Saving…' : '+ Log lead return'}</Btn>
                   </Card>
                 )}
-                <div style={{ display:'flex', gap:5, marginBottom:8, flexWrap:'wrap', alignItems:'center' }}>
-                  <span style={{ fontSize:11, color:'var(--text-4)' }}>Status:</span>
-                  {['All',...LEAD_STATUSES].map(s => <button key={s} onClick={() => setLeadFilter(s)} style={{ padding:'3px 10px', borderRadius:99, border:'none', cursor:'pointer', fontSize:11, fontWeight:500, background:leadFilter===s?N:'var(--surface-3)', color:leadFilter===s?'#fff':'var(--text-3)' }}>{s}</button>)}
+
+                {/* Filter pills */}
+                <div style={{ display:'flex', gap:5, marginBottom:8, flexWrap:'wrap' }}>
+                  {['All', ...LEAD_STATUSES].map(s => (
+                    <button key={s} onClick={() => setLeadFilter(s)} style={{ padding:'3px 10px', borderRadius:99, border:'none', cursor:'pointer', fontSize:11, fontWeight:500, background:leadFilter===s?N:'var(--surface-3)', color:leadFilter===s?'#fff':'var(--text-3)' }}>{s}</button>
+                  ))}
                 </div>
-                <div style={{ display:'flex', gap:5, marginBottom:12, flexWrap:'wrap', alignItems:'center' }}>
-                  <span style={{ fontSize:11, color:'var(--text-4)' }}>Source:</span>
-                  {['All',...LEAD_SOURCES].map(s => <button key={s} onClick={() => setLeadSourceFilter(s)} style={{ padding:'3px 10px', borderRadius:99, border:'none', cursor:'pointer', fontSize:11, fontWeight:500, background:leadSourceFilter===s?'#374151':'var(--surface-3)', color:leadSourceFilter===s?'#fff':'var(--text-3)' }}>{s}</button>)}
+                <div style={{ display:'flex', gap:5, marginBottom:10, flexWrap:'wrap' }}>
+                  {['All', ...LEAD_SOURCES].map(s => {
+                    const sc = LEAD_SOURCE_COLORS[s]
+                    const act = leadSourceFilter === s
+                    return (
+                      <button key={s} onClick={() => setLeadSourceFilter(s)} style={{ padding:'3px 10px', borderRadius:99, border:'none', cursor:'pointer', fontSize:10, fontWeight:500, background:act?(sc?.bg||N):'var(--surface-3)', color:act?(sc?.tx||'#fff'):'var(--text-3)' }}>{s}</button>
+                    )
+                  })}
                 </div>
+
                 <Card p={0}>
-                  {filteredLeads.length === 0 ? <EmptyState text={leads.length === 0 ? 'No lead returns logged yet.' : 'No records match this filter.'} /> : (
+                  {filteredLeads.length === 0 ? <EmptyState text="No lead returns match this filter." icon="↩" /> : (
                     <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                      <thead><tr style={{ background:'var(--surface-2)' }}>{['Name','Phone','Source','Date','Status',''].map(h => <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>)}</tr></thead>
-                      <tbody>{filteredLeads.flatMap(l => {
-                        const sc  = LEAD_STATUS_COLORS[l.status]  || LEAD_STATUS_COLORS['New']
-                        const src = LEAD_SOURCE_COLORS[l.source] || LEAD_SOURCE_COLORS['Other']
-                        const isExp = leadExpanded === l.id
-                        return [
-                          <tr key={l.id} onClick={() => setLeadExpanded(isExp ? null : l.id)} style={{ borderTop:'1px solid var(--border)', cursor:'pointer' }}>
-                            <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{l.name}</td>
-                            <td style={{ padding:'9px 12px', fontSize:12, color:'var(--text-3)' }}>{l.phone}</td>
-                            <td style={{ padding:'9px 12px' }}><span style={{ background:src.bg, color:src.tx, padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:500 }}>{l.source}</span></td>
-                            <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-4)' }}>{new Date(l.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })}</td>
-                            <td style={{ padding:'9px 12px' }}><span style={{ background:sc.bg, color:sc.tx, padding:'2px 8px', borderRadius:99, fontSize:11, fontWeight:500 }}>{l.status}</span></td>
-                            <td style={{ padding:'9px 12px', fontSize:10, color:'var(--text-4)' }}>{isExp ? '▲' : '▼'}</td>
-                          </tr>,
-                          isExp && (
-                            <tr key={l.id + 'x'} style={{ background:'var(--surface-2)', borderTop:'1px solid var(--border)' }}>
-                              <td colSpan={6} style={{ padding:'10px 14px' }}>
-                                <div style={{ display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-start' }}>
-                                  <div>
-                                    <div style={{ fontSize:10, fontWeight:500, color:'var(--text-4)', marginBottom:5, textTransform:'uppercase' }}>Update status</div>
-                                    <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-                                      {LEAD_STATUSES.map(s => { const c = LEAD_STATUS_COLORS[s]; return <button key={s} onClick={e => { e.stopPropagation(); updateLeadStatus(l.id, s) }} style={{ padding:'3px 9px', borderRadius:99, cursor:'pointer', fontSize:11, fontWeight:500, border:`1px solid ${l.status===s?c.tx:'var(--border)'}`, background:l.status===s?c.bg:'var(--surface)', color:l.status===s?c.tx:'var(--text-3)' }}>{s}</button> })}
-                                    </div>
-                                  </div>
-                                  <div style={{ minWidth:180 }}>
-                                    <div style={{ fontSize:10, fontWeight:500, color:'var(--text-4)', marginBottom:5, textTransform:'uppercase' }}>Return reason</div>
-                                    <select
-                                      value={l.return_reason || 'Disconnected'}
-                                      onClick={e => e.stopPropagation()}
-                                      onChange={async e => {
-                                        const return_reason = e.target.value
-                                        await supabase.from('lead_returns').update({ return_reason }).eq('id', l.id)
-                                        setLeads(ls => ls.map(x => x.id === l.id ? { ...x, return_reason } : x))
-                                      }}
-                                      style={{ ...IS, fontSize:12 }}
-                                    >
-                                      {LEAD_RETURN_REASONS.map(r => <option key={r}>{r}</option>)}
-                                    </select>
-                                  </div>
-                                  <button onClick={e => { e.stopPropagation(); deleteLead(l.id) }} style={{ border:'none', background:'none', cursor:'pointer', color:'#ef4444', fontSize:12, alignSelf:'flex-end' }}>🗑 Delete</button>
-                                </div>
+                      <thead>
+                        <tr style={{ background:'var(--surface-2)' }}>
+                          {['Name','Phone','Source','Status','Logged','Notes',''].map(h => (
+                            <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredLeads.map(l => {
+                          const sc  = LEAD_STATUS_COLORS[l.status] || {}
+                          const src = LEAD_SOURCE_COLORS[l.source] || {}
+                          const isExp = leadExpanded === l.id
+                          return [
+                            <tr key={l.id} onClick={() => setLeadExpanded(isExp ? null : l.id)} style={{ borderTop:'1px solid var(--border)', cursor:'pointer' }}
+                              onMouseEnter={e => e.currentTarget.style.background='var(--surface-2)'}
+                              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                              <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{l.name}</td>
+                              <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-3)' }}>{l.phone}</td>
+                              <td style={{ padding:'9px 12px' }}><span style={{ fontSize:10, fontWeight:500, padding:'2px 7px', borderRadius:99, background:src.bg||'#f3f4f6', color:src.tx||'#374151' }}>{l.source}</span></td>
+                              <td style={{ padding:'9px 12px' }}>
+                                <select value={l.status} onChange={e => { e.stopPropagation(); updateLeadStatus(l.id, e.target.value) }} onClick={e => e.stopPropagation()} style={{ fontSize:11, fontWeight:500, padding:'2px 7px', borderRadius:99, border:'none', cursor:'pointer', background:sc.bg||'#f3f4f6', color:sc.tx||'#374151', outline:'none' }}>
+                                  {LEAD_STATUSES.map(s => <option key={s}>{s}</option>)}
+                                </select>
                               </td>
-                            </tr>
-                          )
-                        ].filter(Boolean)
-                      })}</tbody>
+                              <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-4)' }}>{new Date(l.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })}</td>
+                              <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-3)', maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l.notes || '—'}</td>
+                              <td style={{ padding:'9px 12px', fontSize:10, color:'var(--text-4)' }}>{isExp ? '▲' : '▼'}</td>
+                            </tr>,
+                            isExp && (
+                              <tr key={l.id+'x'} style={{ background:'var(--surface-2)', borderTop:'1px solid var(--border)' }}>
+                                <td colSpan={7} style={{ padding:'10px 14px' }}>
+                                  <div style={{ display:'flex', gap:10, alignItems:'flex-end' }}>
+                                    <Field label="Notes" mb={0} style={{ flex:1 }}>
+                                      <input style={{ ...IS, fontSize:12 }} defaultValue={l.notes || ''} onBlur={e => updateLeadNotes(l.id, e.target.value)} placeholder="Add notes…" onClick={e => e.stopPropagation()} />
+                                    </Field>
+                                    {isAdmin && (
+                                      <button onClick={e => { e.stopPropagation(); setConfirmDelete({ _type:'lead', id:l.id }) }} style={{ fontSize:11, color:'#ef4444', background:'none', border:'1px solid #fca5a5', borderRadius:6, padding:'5px 10px', cursor:'pointer' }}>
+                                        🗑 Delete
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ),
+                          ].filter(Boolean)
+                        })}
+                      </tbody>
                     </table>
                   )}
                 </Card>
               </div>
+
+              {/* Lead sidebar stats */}
               <div>
                 <Card mb={10}>
                   <div style={{ fontSize:12, fontWeight:500, color:'var(--text-1)', marginBottom:10 }}>By status</div>
-                  {[{ label:'Total', val:leads.length }, ...LEAD_STATUSES.map(s => ({ label:s, val:leadCounts[s]||0, c:LEAD_STATUS_COLORS[s]?.tx }))].map((s, i, a) => (
-                    <div key={s.label} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:i<a.length-1?'1px solid var(--border)':'none' }}>
-                      <span style={{ fontSize:11, color:'var(--text-3)' }}>{s.label}</span>
-                      <span style={{ fontSize:12, fontWeight:500, color:s.c||'var(--text-1)' }}>{s.val}</span>
-                    </div>
-                  ))}
+                  {LEAD_STATUSES.map(s => {
+                    const sc = LEAD_STATUS_COLORS[s]
+                    return (
+                      <div key={s} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'4px 0', borderBottom:'1px solid var(--border)' }}>
+                        <span style={{ fontSize:11, padding:'1px 6px', borderRadius:99, background:sc?.bg, color:sc?.tx, fontWeight:500 }}>{s}</span>
+                        <span style={{ fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{leadCounts[s]||0}</span>
+                      </div>
+                    )
+                  })}
                 </Card>
                 <Card>
                   <div style={{ fontSize:12, fontWeight:500, color:'var(--text-1)', marginBottom:10 }}>By source</div>
-                  {LEAD_SOURCES.map((s, i) => { const src = LEAD_SOURCE_COLORS[s]; return (
-                    <div key={s} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:i<LEAD_SOURCES.length-1?'1px solid var(--border)':'none' }}>
+                  {LEAD_SOURCES.map(s => (
+                    <div key={s} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:'1px solid var(--border)' }}>
                       <span style={{ fontSize:11, color:'var(--text-3)' }}>{s}</span>
-                      <span style={{ fontSize:12, fontWeight:500, color:src.tx }}>{leadSrcCounts[s] || 0}</span>
+                      <span style={{ fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{leadSrcCounts[s]||0}</span>
                     </div>
-                  )})}
+                  ))}
                 </Card>
               </div>
             </div>
@@ -882,65 +727,64 @@ export default function Sales({ user }) {
         {/* ── GOALS (admin only) ── */}
         {tab === 'Goals' && isAdmin && (
           <div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-              <Card p={0}>
-                <div style={{ padding:'11px 14px', borderBottom:'1px solid var(--border)', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>Monthly goals</div>
-                <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                  <thead><tr style={{ background:'var(--surface-2)' }}>{['Agent','Items','Premium','Quotes',''].map(h => <th key={h} style={{ padding:'7px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>)}</tr></thead>
-                  <tbody>{members.map(m => { const g = goals[m.id] || { policies:8, premium:10000, quotes:30 }; return (
-                    <tr key={m.id} style={{ borderTop:'1px solid var(--border)' }}>
-                      <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{m.name}</td>
-                      <td style={{ padding:'9px 12px', fontSize:12, color:'var(--text-3)' }}>{g.policies}</td>
-                      <td style={{ padding:'9px 12px', fontSize:12, color:'var(--text-3)' }}>${(g.premium || 0).toLocaleString()}</td>
-                      <td style={{ padding:'9px 12px', fontSize:12, color:'var(--text-3)' }}>{g.quotes}</td>
-                      <td style={{ padding:'9px 12px' }}><Btn sm variant="outline" onClick={() => startEditGoal(m.id)}>Edit</Btn></td>
-                    </tr>
-                  )})}</tbody>
-                </table>
-              </Card>
-              <Card p={0}>
-                <div style={{ padding:'11px 14px', borderBottom:'1px solid var(--border)', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>Weekly goals</div>
-                <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                  <thead><tr style={{ background:'var(--surface-2)' }}>{['Agent','Items','Premium','Quotes'].map(h => <th key={h} style={{ padding:'7px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>)}</tr></thead>
-                  <tbody>{members.map(m => {
-                    const g      = goals[m.id] || { weekly_policies:2, weekly_premium:2500, weekly_quotes:8 }
-                    const ws     = weekSales.filter(s => s.uid === m.id)
-                    const wItems = ws.reduce((s, x) => s + (x.items || 1), 0)
-                    const wP     = ws.reduce((s, x) => s + (x.premium || 0), 0)
-                    const wQ     = Math.max(0, weekActs.filter(a => a.uid === m.id && a.type === 'Quote').reduce((s, a) => s + a.count, 0))
+            <div style={{ fontSize:12, color:'var(--text-3)', marginBottom:14 }}>
+              Set monthly and weekly targets for each agent. Click an agent row to edit.
+            </div>
+            <Card p={0}>
+              <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                <thead>
+                  <tr style={{ background:'var(--surface-2)' }}>
+                    {['Agent','Mo. Items','Mo. Premium','Mo. Quotes','Wk. Items','Wk. Premium','Wk. Quotes',''].map(h => (
+                      <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map(m => {
+                    const g     = goals[m.id] || { policies:8, premium:10000, quotes:30, weekly_policies:2, weekly_premium:2500, weekly_quotes:8 }
+                    const ms    = sales.filter(s => s.uid === m.id)
+                    const ma    = acts.filter(a => a.uid === m.id)
+                    const wSales = weekSales.filter(s => s.uid === m.id)
+                    const wActs  = weekActs.filter(a => a.uid === m.id)
+                    const mI  = ms.reduce((s, x) => s + (x.items||1), 0)
+                    const mP  = ms.reduce((s, x) => s + (x.premium||0), 0)
+                    const mQ  = Math.max(0, ma.filter(a => a.type==='Quote').reduce((s, a) => s + a.count, 0))
+                    const wI  = wSales.reduce((s, x) => s + (x.items||1), 0)
+                    const wP  = wSales.reduce((s, x) => s + (x.premium||0), 0)
+                    const wQ  = Math.max(0, wActs.filter(a => a.type==='Quote').reduce((s, a) => s + a.count, 0))
                     return (
                       <tr key={m.id} style={{ borderTop:'1px solid var(--border)' }}>
                         <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{m.name}</td>
-                        <td style={{ padding:'9px 12px', fontSize:11, color:pcol(wItems, g.weekly_policies||2) }}>{wItems}/{g.weekly_policies||2}</td>
+                        <td style={{ padding:'9px 12px', fontSize:11, color:pcol(mI, g.policies||8) }}>{mI}/{g.policies||8}</td>
+                        <td style={{ padding:'9px 12px', fontSize:11, color:pcol(mP, g.premium||10000) }}>${mP.toLocaleString()}/{(g.premium||10000).toLocaleString()}</td>
+                        <td style={{ padding:'9px 12px', fontSize:11, color:pcol(mQ, g.quotes||30) }}>{mQ}/{g.quotes||30}</td>
+                        <td style={{ padding:'9px 12px', fontSize:11, color:pcol(wI, g.weekly_policies||2) }}>{wI}/{g.weekly_policies||2}</td>
                         <td style={{ padding:'9px 12px', fontSize:11, color:pcol(wP, g.weekly_premium||2500) }}>${wP.toLocaleString()}/{(g.weekly_premium||2500).toLocaleString()}</td>
                         <td style={{ padding:'9px 12px', fontSize:11, color:pcol(wQ, g.weekly_quotes||8) }}>{wQ}/{g.weekly_quotes||8}</td>
+                        <td style={{ padding:'9px 12px' }}>
+                          <button onClick={() => startEditGoal(m.id)} style={{ fontSize:11, color:N, background:'var(--primary-light)', border:`1px solid var(--primary-mid)`, borderRadius:6, padding:'3px 10px', cursor:'pointer' }}>Edit</button>
+                        </td>
                       </tr>
                     )
-                  })}</tbody>
-                </table>
-              </Card>
-            </div>
+                  })}
+                </tbody>
+              </table>
+            </Card>
           </div>
         )}
       </div>
 
-      {/* ── Edit sale modal ── */}
+      {/* Edit sale modal */}
       {editingSale && (
         <Modal title="Edit sale" onClose={() => setEditingSale(null)}>
-          <Field label="Client name *">
-            <input style={IS} value={editSaleForm.client} onChange={e => setEditSaleForm(f => ({ ...f, client:e.target.value }))} />
-          </Field>
+          <Field label="Client name *"><input style={IS} value={editSaleForm.client} onChange={e => setEditSaleForm(f => ({ ...f, client:e.target.value }))} /></Field>
           <Field label="Item type">
             <select style={IS} value={editSaleForm.pt} onChange={e => setEditSaleForm(f => ({ ...f, pt:e.target.value }))}>
               {ITEM_TYPES.map(o => <option key={o}>{o}</option>)}
             </select>
           </Field>
-          <Field label="Premium ($)">
-            <input style={IS} type="number" value={editSaleForm.premium} onChange={e => setEditSaleForm(f => ({ ...f, premium:e.target.value }))} />
-          </Field>
-          <Field label="Item count">
-            <input style={IS} type="number" min="1" value={editSaleForm.items} onChange={e => setEditSaleForm(f => ({ ...f, items:e.target.value }))} />
-          </Field>
+          <Field label="Premium ($)"><input style={IS} type="number" value={editSaleForm.premium} onChange={e => setEditSaleForm(f => ({ ...f, premium:e.target.value }))} /></Field>
+          <Field label="Item count"><input style={IS} type="number" min="1" value={editSaleForm.items} onChange={e => setEditSaleForm(f => ({ ...f, items:e.target.value }))} /></Field>
           <div style={{ background:'var(--warning-light)', border:'1px solid #fcd34d', borderRadius:7, padding:'8px 12px', fontSize:11, color:'#92400e', marginBottom:14 }}>
             Editing a sale will be recorded in the audit log.
           </div>
@@ -951,7 +795,7 @@ export default function Sales({ user }) {
         </Modal>
       )}
 
-      {/* ── Goal edit modal ── */}
+      {/* Edit goal modal */}
       {editGoal && (
         <Modal title={`Edit goals — ${profiles.find(p => p.id === editGoal)?.name}`} onClose={() => setEditGoal(null)}>
           <div style={{ fontSize:12, fontWeight:500, color:'var(--text-2)', marginBottom:10, padding:'6px 10px', background:'var(--surface-2)', borderRadius:6 }}>Monthly targets</div>
@@ -972,23 +816,23 @@ export default function Sales({ user }) {
         </Modal>
       )}
 
-      {/* ── Confirm delete sale ── */}
+      {/* Confirm delete sale */}
       {confirmDelete && !confirmDelete._type && (
         <ConfirmModal
           title="Delete this sale?"
-          message={`This will permanently remove the sale for ${confirmDelete.client} ($${Number(confirmDelete.premium).toLocaleString()}). This action is logged in the audit trail.`}
-          confirmLabel="Delete sale"
+          message={`This will permanently remove the sale for ${confirmDelete.client} ($${Number(confirmDelete.premium).toLocaleString()}).`}
+          confirmLabel="Delete"
           danger
           onConfirm={() => deleteSale(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
         />
       )}
 
-      {/* ── Confirm delete lead ── */}
+      {/* Confirm delete lead */}
       {confirmDelete?._type === 'lead' && (
         <ConfirmModal
           title="Delete this lead return?"
-          message="This will permanently remove this lead return record."
+          message="This will permanently remove the lead return record."
           confirmLabel="Delete"
           danger
           onConfirm={() => confirmLeadDelete(confirmDelete.id)}
@@ -996,7 +840,7 @@ export default function Sales({ user }) {
         />
       )}
 
-      {saleToast && <SaleToast client={saleToast.client} premium={saleToast.premium} split={saleToast.split} partner={saleToast.partner} policyType={saleToast.policyType} userId={user.id} userName={user.name} onDone={() => setSaleToast(null)} />}
+      {saleToast && <SaleToast sale={saleToast} onDone={() => setSaleToast(null)} />}
     </>
   )
 }
