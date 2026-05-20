@@ -23,6 +23,10 @@ function canSee(userName, channelId) {
 }
 
 export default function Chat({ user }) {
+  // Lock in admin clearance level properties immediately
+  const isAdmin = user.role === 'admin'
+
+  // ── Core state ────────────────────────────────────────────────
   const [channel,            setChannel]            = useState(() => CHANNELS.filter(c => canSee(user.name, c.id))[0]?.id || 'main')
   const [messages,           setMessages]           = useState([])
   const [profiles,           setProfiles]           = useState([])
