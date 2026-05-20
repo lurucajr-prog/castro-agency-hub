@@ -17,6 +17,9 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
   const [loading,        setLoading]        = useState(true)
   const [unreadCounts,   setUnreadCounts]   = useState({})
   
+  // Real-time text snippet preview arrays
+  const [lastPreviews,   setLastPreviews]   = useState({})
+  
   // UI Panels
   const [showGifPicker,  setShowGifPicker]  = useState(false)
   const [gifSearch,      setGifSearch]      = useState('')
@@ -59,10 +62,11 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
       ...p,
       ini: p.ini || p.name?.slice(0, 2).toUpperCase() || '??'
     }))
-    setProfiles(normalized)
 
-    // Sync unread totals
     const countsMap = {}
+    const previewsMap = {}
+
+    // Populate active indicators and snippets for the sidebar layout
     for (const item of normalized) {
       const { count } = await supabase
         .from('direct_messages')
@@ -71,8 +75,20 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
         .eq('to_uid', user.id)
         .eq('read', false)
       countsMap[item.id] = count || 0
+
+      const { data: lastMsg } = await supabase
+        .from('direct_messages')
+        .select('*')
+        .or(`and(from_uid.eq.${user.id},to_uid.eq.${item.id}),and(from_uid.eq.${item.id},to_uid.eq.${user.id})`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+      
+      previewsMap[item.id] = lastMsg?.[0] || null
     }
+
     setUnreadCounts(countsMap)
+    setLastPreviews(previewsMap)
+    setProfiles(normalized)
     setLoading(false)
   }
 
@@ -88,7 +104,6 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
 
     setConversations(data || [])
 
-    // Flag rows as cleared
     await supabase
       .from('direct_messages')
       .update({ read: true })
@@ -98,12 +113,14 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
     
     setUnreadCounts(prev => ({ ...prev, [partner.id]: 0 }))
 
-    // Establish direct secure stream listener
     supabase.channel(`private_dm_${user.id}_${partner.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages' }, payload => {
         const msg = payload.new
         const activePartner = selectedRef.current
         
+        // Dynamic preview synchronization block
+        setLastPreviews(prev => ({ ...prev, [msg.from_uid === user.id ? msg.to_uid : msg.from_uid]: msg }))
+
         if ((msg.from_uid === activePartner?.id && msg.to_uid === user.id) || (msg.from_uid === user.id && msg.to_uid === activePartner?.id)) {
           setConversations(prev => [...prev, msg])
           if (msg.from_uid === activePartner?.id) {
@@ -139,6 +156,7 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
 
     if (!error && data) {
       setConversations(prev => [...prev, data])
+      setLastPreviews(prev => ({ ...prev, [activeTarget.id]: data }))
     }
   }
 
@@ -217,10 +235,18 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
   }
 
   function formatTime(ts) {
-    const d     = new Date(ts)
+    const d = new Date(ts)
     const today = new Date()
     if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  function renderSidebarSnippet(profileId) {
+    const m = lastPreviews[profileId]
+    if (!m) return 'No messages yet'
+    if (m.file_name) return `📎 ${m.file_name}`
+    if (m.image_url && !m.text) return '📷 Photo shared'
+    return m.text || ''
   }
 
   if (loading) return <Spinner />
@@ -229,46 +255,56 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
     <>
       <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden', background: 'var(--bg)' }}>
 
-        {/* Sidebar Roster */}
-        <div style={{ width: 240, borderRight: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        {/* Sidebar Roster Panel */}
+        <div style={{ width: 250, borderRight: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 700, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
             Direct Messages
           </div>
 
-          <div style={{ flex: 1, overflowY: 'auto', padding: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             {profiles.map(p => {
               const isTarget = selected?.id === p.id
               const unreads = unreadCounts[p.id] || 0
               return (
-                <button key={p.id} onClick={() => initiateConversation(p)} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '10px 12px', border: 'none', borderRadius: 8, background: isTarget ? 'var(--primary-light)' : 'transparent', color: 'var(--text-1)', cursor: 'pointer', position: 'relative' }}>
-                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: p.role === 'admin' ? R : 'var(--primary-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: p.role === 'admin' ? '#fff' : '#1e40af', marginRight: 10 }}>{p.ini}</div>
-                  <span style={{ fontSize: 13, fontWeight: unreads > 0 ? 700 : 500, flex: 1, textAlign: 'left' }}>{p.name}</span>
-                  {unreads > 0 && (
-                    <span style={{ background: R, color: '#fff', borderRadius: 10, fontSize: 9, fontWeight: 700, padding: '2px 6px' }}>{unreads}</span>
-                  )}
+                <button key={p.id} onClick={() => initiateConversation(p)} style={{ display: 'flex', alignItems: 'center', width: '100%', padding: '12px 14px', border: 'none', borderBottom: '1px solid var(--border)', background: isTarget ? 'var(--primary-light)' : 'transparent', color: 'var(--text-1)', cursor: 'pointer', position: 'relative', transition: 'background 0.15s' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: p.role === 'admin' ? R : 'var(--primary-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: p.role === 'admin' ? '#fff' : '#1e40af', marginRight: 12, flexShrink:0 }}>{p.ini}</div>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'baseline', marginBottom: 2 }}>
+                      <span style={{ fontSize: 13, fontWeight: unreads > 0 ? 700 : 600, color: 'var(--text-1)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</span>
+                      {unreads > 0 && <span style={{ background: R, color: '#fff', borderRadius: 10, fontSize: 9, fontWeight: 700, padding: '1px 5px' }}>{unreads}</span>}
+                    </div>
+                    {/* The restored secondary conversation snippet preview line */}
+                    <span style={{ fontSize: 11, color: unreads > 0 ? 'var(--text-1)' : 'var(--text-4)', fontWeight: unreads > 0 ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'left' }}>
+                      {renderSidebarSnippet(p.id)}
+                    </span>
+                  </div>
                 </button>
               )
             })}
           </div>
         </div>
 
-        {/* Conversation Stream */}
+        {/* Conversation Stream Workspace */}
         {!selected ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 32 }}>💬</div>
-            <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-2)' }}>Select a teammate to chat securely</div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 24 }}>
+            {/* The professional centered geometric blank slate card placeholder */}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '40px 32px', maxWidth: 400, width: '100%', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ fontSize: 44, marginBottom: 12 }}>💬</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-1)', marginBottom: 6 }}>Secure Message Center</div>
+              <div style={{ fontSize: 13, color: 'var(--text-4)', lineHeight: 1.5 }}>Select a teammate from the directory panel to initiate a private corporate operational conversation workspace session.</div>
+            </div>
           </div>
         ) : (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             
-            {/* Upper Context Header */}
+            {/* Upper Header bar */}
             <div style={{ height: 52, borderBottom: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', padding: '0 20px', gap: 10, flexShrink: 0 }}>
               <div style={{ width: 30, height: 30, borderRadius: '50%', background: selected.role === 'admin' ? R : 'var(--primary-mid)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: selected.role === 'admin' ? '#fff' : '#1e40af' }}>{selected.ini}</div>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-1)' }}>{selected.name}</span>
               <span style={{ fontSize: 11, color: 'var(--text-4)' }}>({selected.title})</span>
             </div>
 
-            {/* Scrollable Bubble Box */}
+            {/* Main scrollable body area */}
             <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 4 }} onClick={() => setShowGifPicker(false)}>
               {conversations.map((m, idx) => {
                 const isMe = m.from_uid === user.id
@@ -291,19 +327,12 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
                     <div style={{ maxWidth: '75%', display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
                       {!isGrouped && (
                         <span style={{ fontSize: 10, color: 'var(--text-4)', marginBottom: 2 }}>
-                          {formatTime(m.created_at)}
+                          {new Date(m.created_at).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })}
                         </span>
                       )}
 
                       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        {/* Ironclad High-Contrast Color Theme Logic (Safe across Light & Dark views) */}
-                        <div style={{ 
-                          background: isMe ? 'var(--primary)' : 'var(--surface-2)', 
-                          color: isMe ? '#ffffff' : 'var(--text-1)', 
-                          border: isMe ? 'none' : '1px solid var(--border)', 
-                          borderRadius: 12, padding: m.text ? '8px 14px' : '4px', 
-                          boxShadow: 'var(--shadow-xs)' 
-                        }}>
+                        <div style={{ background: isMe ? 'var(--primary)' : 'var(--surface-2)', color: isMe ? '#ffffff' : 'var(--text-1)', border: isMe ? 'none' : '1px solid var(--border)', borderRadius: 12, padding: m.text ? '8px 14px' : '4px', boxShadow: 'var(--shadow-xs)' }}>
                           {m.file_url && (
                             <a href={m.file_url} target="_blank" rel="noreferrer" download style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: isMe ? '#ffffff' : 'var(--primary)', fontSize: 12, fontWeight: 600 }}>
                               <span>📄</span> {m.file_name || 'Download file'}
@@ -325,7 +354,7 @@ export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
               })}
             </div>
 
-            {/* Input Dock Control */}
+            {/* Input Footer Controls */}
             <div style={{ padding: '10px 14px', borderTop: '1px solid var(--border)', background: 'var(--surface)', flexShrink: 0 }}>
               {showGifPicker && (
                 <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 10, marginBottom: 10, boxShadow: 'var(--shadow-md)' }}>
