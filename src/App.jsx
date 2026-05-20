@@ -1,7 +1,6 @@
 // ============================================================
-// Castro Agency Hub — App Entry (routing shell)
+// Castro Agency Hub — App Entry (Robust Routing Shell)
 // Place this file at: src/App.jsx
-// Batch 1: added NotificationHistory route
 // ============================================================
 import './styles/theme.css'
 import { useState, useEffect } from 'react'
@@ -45,7 +44,6 @@ const PAGES = {
   'notification-history':   NotificationHistory,
 }
 
-// These pages stay mounted once visited so navigation is instant
 const PERSISTENT_PAGES = ['chat', 'dms']
 
 export default function App() {
@@ -70,31 +68,74 @@ export default function App() {
     else          document.documentElement.classList.remove('dark')
   }, [darkMode])
 
-  useEffect(() => {
-    // Check existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session)
-      if (session) await loadProfile(session.user.email)
-      else setLoading(false)
-    })
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setSession(session)
-      if (session) await loadProfile(session.user.email)
-      else { setProfile(null); setLoading(false) }
-    })
-    return () => subscription.unsubscribe()
-  }, [])
-
+  // Securely load profile row with strict exception safety
   async function loadProfile(email) {
-    const { data } = await supabase.from('profiles').select('*').eq('email', email).single()
-    if (data) {
-      setProfile(data)
-      setDarkMode(data.dark_mode === true)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email.toLowerCase().trim())
+        .single()
+
+      if (error) {
+        console.error("Profile matching error details:", error)
+      }
+      if (data) {
+        setProfile(data)
+        setDarkMode(data.dark_mode === true)
+      }
+    } catch (err) {
+      console.error("Critical error in loadProfile handler:", err)
+    } finally {
+      // Guaranteed to execute even if query fails completely
+      setLoading(false)
     }
-    setLoading(false)
   }
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function initializeAuth() {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) throw error
+
+        if (!isMounted) return
+        setSession(session)
+
+        if (session?.user?.email) {
+          await loadProfile(session.user.email)
+        } else {
+          setLoading(false)
+        }
+      } catch (err) {
+        console.error("Auth session initialization failed:", err)
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    initializeAuth()
+
+    // Listen for real-time authentication state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
+      if (!isMounted) return
+      setSession(currentSession)
+      
+      if (currentSession?.user?.email) {
+        setLoading(true)
+        await loadProfile(currentSession.user.email)
+      } else {
+        setProfile(null)
+        setDarkMode(false)
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      isMounted = false
+      if (subscription) subscription.unsubscribe()
+    }
+  }, [])
 
   async function toggleDarkMode() {
     const next = !darkMode
@@ -112,7 +153,6 @@ export default function App() {
     setVisitedPages(new Set(['dashboard']))
   }
 
-  // Navigate to DMs and pre-select a conversation
   function openDm(profileId) {
     setDmTarget(profileId)
     setPage('dms')
@@ -128,6 +168,7 @@ export default function App() {
     )
   }
 
+  // If session failed or profile row wasn't found, drop back to login cleanly
   if (!session || !profile) return <Login />
 
   const PageComponent  = PAGES[page]
