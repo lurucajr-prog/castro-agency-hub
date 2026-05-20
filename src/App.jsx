@@ -3,7 +3,7 @@
 // Place this file at: src/App.jsx
 // ============================================================
 import './styles/theme.css'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase }          from './lib/supabase'
 import ErrorBoundary         from './components/ErrorBoundary'
 import Login                 from './components/Login'
@@ -54,7 +54,8 @@ export default function App() {
   const [darkMode,     setDarkMode]     = useState(false)
   const [dmTarget,     setDmTarget]     = useState(null)
   
-  // Dynamically tracks all visited routes so they stay preserved inside the browser instance
+  // Tracks active in-memory user profile to prevent background tab focus flashes
+  const activeProfileRef = useRef(null)
   const [visitedPages, setVisitedPages] = useState(new Set(['dashboard']))
   const [debugStatus,  setDebugStatus]  = useState('Initializing verification trackers...')
 
@@ -67,6 +68,7 @@ export default function App() {
     else          document.documentElement.classList.remove('dark')
   }, [darkMode])
 
+  // Single consolidated profile loader
   async function loadProfileData(emailStr) {
     if (!emailStr) {
       setLoading(false)
@@ -88,10 +90,11 @@ export default function App() {
 
       if (data) {
         setProfile(data)
+        activeProfileRef.current = data // Sync to reference tracker
         setDarkMode(data.dark_mode === true)
       }
     } catch (err) {
-      console.error(err)
+      console.error("Profile compilation crash caught:", err)
     } finally {
       setLoading(false)
     }
@@ -100,6 +103,7 @@ export default function App() {
   useEffect(() => {
     let isMounted = true
 
+    // Step 1: Query for an existing local browser session immediately on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return
       if (session) {
@@ -112,18 +116,24 @@ export default function App() {
       if (isMounted) setLoading(false)
     })
 
+    // Step 2: Establish background listener for subsequent sign-in/sign-out events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
       if (!isMounted) return
       
       if (event === 'SIGNED_IN') {
         setSession(currentSession)
         if (currentSession?.user?.email) {
-          setLoading(true)
+          // FIX: Only trigger full-screen loading state if there isn't an active profile in memory.
+          // This permanently kills the split-second flash when switching Chrome browser tabs!
+          if (!activeProfileRef.current) {
+            setLoading(true)
+          }
           loadProfileData(currentSession.user.email)
         }
       } else if (event === 'SIGNED_OUT') {
         setSession(null)
         setProfile(null)
+        activeProfileRef.current = null // Clear memory tracker
         setDarkMode(false)
         setLoading(false)
       }
@@ -148,6 +158,7 @@ export default function App() {
     await supabase.auth.signOut()
     setSession(null)
     setProfile(null)
+    activeProfileRef.current = null
     setPage('dashboard')
     setDarkMode(false)
     setDmTarget(null)
@@ -160,6 +171,7 @@ export default function App() {
     setPage('dms')
   }
 
+  // ── Render Track 1: Loading ──
   if (loading) {
     return (
       <div style={{ minHeight:'100vh', background:'#1B3A6B', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:20, padding:24, fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
@@ -170,6 +182,7 @@ export default function App() {
     )
   }
 
+  // ── Render Track 2: Safe Account Recovery ──
   if (session && !profile) {
     return (
       <div style={{ minHeight:'100vh', background:'#1B3A6B', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:20, padding:24, fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
@@ -187,6 +200,7 @@ export default function App() {
     )
   }
 
+  // ── Render Track 3: Standard Form Routing ──
   if (!session || !profile) return <Login />
 
   return (
@@ -197,7 +211,6 @@ export default function App() {
         <TopBar user={profile} page={page} setPage={setPage} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
 
         <div style={{ flex:1, overflow:'hidden', position:'relative' }}>
-          {/* Universal High-Performance Preserved DOM Grid Mapping Loop */}
           {Object.entries(PAGES).map(([pageKey, PageComponent]) => {
             if (!visitedPages.has(pageKey)) return null
             const isCurrentActiveRoute = page === pageKey
