@@ -139,7 +139,6 @@ export default function Sales({ user }) {
   const [savingEdit,    setSavingEdit]    = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
   
-  // Safe Mutation state handles confirmations before writing to cloud DB
   const [pendingLeadUpdate, setPendingLeadUpdate] = useState(null)
 
   const [leadFilter,       setLeadFilter]       = useState('All')
@@ -218,7 +217,7 @@ export default function Sales({ user }) {
           to_uid:     p.id,
           type:       'sale',
           title:      `${agentName} just closed a sale! 🎯`,
-          body:       `${sForm.client} · {sForm.pt} · $${Number(sForm.premium).toLocaleString()}`,
+          body:       `${sForm.client} · ${sForm.pt} · $${Number(sForm.premium).toLocaleString()}`,
           nav_target: 'sales',
           read:       false,
         }))
@@ -273,10 +272,9 @@ export default function Sales({ user }) {
     setSaving(false)
   }
 
-  // Safe verification proxy routes mutations through review intercept modals
   async function executeLeadStatusUpdate(id, nextStatus) {
     await supabase.from('lead_returns').update({ status: nextStatus }).eq('id', id)
-    setLeads(ls => ls.map(l => l.id === id ? { ...l, status: nextStatus } : r))
+    setLeads(ls => ls.map(l => l.id === id ? { ...l, status: nextStatus } : l))
     setPendingLeadUpdate(null)
   }
 
