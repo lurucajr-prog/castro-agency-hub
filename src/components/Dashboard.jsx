@@ -153,6 +153,7 @@ export default function Dashboard({ user, setPage }) {
   const [teamGoal,           setTeamGoal]           = useState(50000)
   const [lastMonthPrem,      setLastMonthPrem]      = useState(0)
   const [lastMonthItems,     setLastMonthItems]     = useState(0)
+  const [myLastMonthItems,   setMyLastMonthItems]   = useState(0)
   const [adminStats,         setAdminStats]         = useState(null)
   const [activityFeed,       setActivityFeed]       = useState([])
 
@@ -167,7 +168,6 @@ export default function Dashboard({ user, setPage }) {
     fetchAll()
 
     // Realtime subscription lives HERE, not inside fetchAll
-    // This way it only runs once and gets properly cleaned up
     const salesRtCh = supabase.channel('dashboard_sales_rt')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sales' }, payload => {
         const sale = payload.new
@@ -236,6 +236,7 @@ export default function Dashboard({ user, setPage }) {
     const lmSales = lastMonthRes.data || []
     setLastMonthPrem(lmSales.reduce((s, x) => s + (x.premium || 0), 0))
     setLastMonthItems(lmSales.reduce((s, x) => s + (x.items || 1), 0))
+    setMyLastMonthItems(lmSales.filter(x => x.uid === user.id).reduce((s, x) => s + (x.items || 1), 0))
 
     setQuoteHistory(qHistory.data || [])
     setData({
@@ -292,7 +293,6 @@ export default function Dashboard({ user, setPage }) {
   async function saveQuote() {
     if (!quoteDraft.text.trim()) return
     setSavingQuote(true)
-    // Save current quote to history before overwriting
     if (quoteText && quoteText !== 'Make today count.') {
       await supabase.from('quote_history').insert({ text: quoteText, author: quoteAuthor })
     }
@@ -300,7 +300,6 @@ export default function Dashboard({ user, setPage }) {
       supabase.from('settings').upsert({ key: 'quote_text',   value: quoteDraft.text.trim() }),
       supabase.from('settings').upsert({ key: 'quote_author', value: quoteDraft.author.trim() }),
     ])
-    // Refresh history
     const { data: newHistory } = await supabase.from('quote_history').select('*').order('created_at', { ascending: false }).limit(12)
     setQuoteHistory(newHistory || [])
     setQuoteText(quoteDraft.text.trim())
@@ -357,13 +356,10 @@ export default function Dashboard({ user, setPage }) {
   const members   = profiles.filter(p => p.role === 'member')
   const goalsMap  = {}; goals.forEach(g => { goalsMap[g.uid] = g })
 
-  // Include admins who toggled show_on_leaderboard
   const lbParticipants = profiles.filter(p => p.role === 'member' || (p.role === 'admin' && p.show_on_leaderboard))
 
   const totalPrem     = monthSales.reduce((s, x) => s + (x.premium || 0), 0)
   const totalItems    = monthSales.reduce((s, x) => s + (x.items || 1), 0)
-  const totalPremGoal = members.reduce((sum, m) => sum + (goalsMap[m.id]?.premium || 10000), 0)
-  // premPct uses the team goal from settings so the stat card, pacing badge, and goal confetti all agree
   const premPct       = teamGoal > 0 ? Math.min(100, Math.round(totalPrem / teamGoal * 100)) : 0
 
   const myTasks      = tasks.filter(t => t.uid === user.id)
@@ -376,7 +372,7 @@ export default function Dashboard({ user, setPage }) {
   // ── Trend calculations ────────────────────────────────────────
   const premTrend     = lastMonthPrem  > 0 ? Math.round(((totalPrem  - lastMonthPrem)  / lastMonthPrem)  * 100) : null
   const itemsTrend    = lastMonthItems > 0 ? Math.round(((totalItems - lastMonthItems) / lastMonthItems) * 100) : null
-  const myItemsTrend  = lastMonthItems > 0 ? null : null // personal trend needs personal last month data — shown at team level for now
+  const myItemsTrend  = myLastMonthItems > 0 ? Math.round(((myItems - myLastMonthItems) / myLastMonthItems) * 100) : null
 
   // ── Pacing ────────────────────────────────────────────────────
   const bizTotal    = getBusinessDaysInMonth()
@@ -393,7 +389,7 @@ export default function Dashboard({ user, setPage }) {
     return { m, prem, items, streak, g }
   }).sort((a, b) => b.prem - a.prem)
 
-  const myRank = lbData.findIndex(x => x.m.id === user.id) + 1  // 1-based, 0 = not found
+  const myRank = lbData.findIndex(x => x.m.id === user.id) + 1
 
   // ── Today's total ────────────────────────────────────────────
   const todayStart     = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
@@ -402,10 +398,7 @@ export default function Dashboard({ user, setPage }) {
   const todayCount     = todaySales.length
 
   // ── Pace to close ─────────────────────────────────────────────
-  const projectedPremium = bizElapsed > 0
-    ? Math.round((totalPrem / bizElapsed) * bizTotal)
-    : 0
-
+  const projectedPremium = bizElapsed > 0 ? Math.round((totalPrem / bizElapsed) * bizTotal) : 0
   const today = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   const stats = [
@@ -424,14 +417,12 @@ export default function Dashboard({ user, setPage }) {
       sub:   isAdmin ? members.length + ' agents' : '$' + myPrem.toLocaleString() + ' premium',
       pct:   null,
       bg:    '#E6F1FB', tx: '#0C447C', bar: '#378ADD',
-      trend: isAdmin ? itemsTrend : null,
+      trend: isAdmin ? itemsTrend : myItemsTrend,
     },
     {
       label: isAdmin ? 'Total tasks' : 'My tasks',
       val:   isAdmin ? tasks.length : myTasks.length,
-      sub:   isAdmin
-        ? tasks.filter(t => t.done).length + ' completed'
-        : myTasks.filter(t => t.done).length + '/' + myTasks.length + ' done',
+      sub:   isAdmin ? tasks.filter(t => t.done).length + ' completed' : myTasks.filter(t => t.done).length + '/' + myTasks.length + ' done',
       pct:   null,
       bg:    '#EEEDFE', tx: '#3C3489', bar: '#7F77DD',
       trend: null,
@@ -448,7 +439,6 @@ export default function Dashboard({ user, setPage }) {
 
   return (
     <div style={{ padding: 22 }}>
-
       {/* ── Announcement banner ── */}
       {announcementActive && announcementText && !announcementDismissed && (
         <div style={{ background: N, color: '#fff', borderRadius: 9, padding: '10px 16px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -483,10 +473,7 @@ export default function Dashboard({ user, setPage }) {
           <div style={{ background: 'var(--primary-mid)', color: '#1e40af', fontSize: 11, fontWeight: 500, padding: '5px 12px', borderRadius: 8 }}>
             {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })} · {bizDaysLeft} business day{bizDaysLeft !== 1 ? 's' : ''} left
           </div>
-          {/* Pacing indicator — only show once some data exists */}
-          {totalPrem > 0 && (
-            <PacingBadge actual={premPct} expected={expectedPct} />
-          )}
+          {totalPrem > 0 && <PacingBadge actual={premPct} expected={expectedPct} />}
         </div>
       </div>
 
@@ -503,10 +490,7 @@ export default function Dashboard({ user, setPage }) {
               { label:'Follow-ups due',       val:adminStats.followUpDue,          page:'referrals',   icon:'📅', warn: adminStats.followUpDue > 0 },
               { label:'Unresolved lead returns', val:adminStats.newLeadReturns,   page:'sales',       icon:'↩', warn: adminStats.newLeadReturns > 0 },
             ].map(s => (
-              <div key={s.label} onClick={() => setPage(s.page)}
-                style={{ background: s.warn && s.val > 0 ? 'var(--warning-light)' : 'var(--surface)', border: `1px solid ${s.warn && s.val > 0 ? '#fcd34d' : 'var(--border)'}`, borderRadius:10, padding:'11px 14px', cursor:'pointer', transition:'box-shadow 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.boxShadow = 'var(--shadow-sm)'}
-                onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
+              <div key={s.label} onClick={() => setPage(s.page)} style={{ background: s.warn && s.val > 0 ? 'var(--warning-light)' : 'var(--surface)', border: `1px solid ${s.warn && s.val > 0 ? '#fcd34d' : 'var(--border)'}`, borderRadius:10, padding:'11px 14px', cursor:'pointer', transition:'box-shadow 0.15s' }} onMouseEnter={e => e.currentTarget.style.boxShadow = 'var(--shadow-sm)'} onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4 }}>
                   <span style={{ fontSize:14 }}>{s.icon}</span>
                   <div style={{ fontSize:10, color:'var(--text-4)', fontWeight:500, textTransform:'uppercase', letterSpacing:0.4 }}>{s.label}</div>
@@ -518,41 +502,18 @@ export default function Dashboard({ user, setPage }) {
         </div>
       )}
 
-      {/* ── Stat cards — redesigned ── */}
+      {/* ── Stat cards ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 14 }}>
         {stats.map(s => (
-          <div key={s.label} style={{
-            background:   'var(--surface)',
-            borderRadius: 14,
-            padding:      '16px 18px',
-            boxShadow:    'var(--shadow-sm)',
-            border:       '1px solid var(--border)',
-            borderTop:    `3px solid ${s.bar}`,
-            transition:   'box-shadow 0.2s, transform 0.2s',
-            position:     'relative',
-            overflow:     'hidden',
-          }}
-            onMouseEnter={e => { e.currentTarget.style.boxShadow = 'var(--shadow-md)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-            onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; e.currentTarget.style.transform = 'none' }}
-          >
-            {/* Background tint -- stronger corner accent */}
+          <div key={s.label} style={{ background: 'var(--surface)', borderRadius: 14, padding: '16px 18px', boxShadow: 'var(--shadow-sm)', border: '1px solid var(--border)', borderTop: `3px solid ${s.bar}`, transition: 'box-shadow 0.2s, transform 0.2s', position: 'relative', overflow: 'hidden' }} onMouseEnter={e => { e.currentTarget.style.boxShadow = 'var(--shadow-md)'; e.currentTarget.style.transform = 'translateY(-1px)' }} onMouseLeave={e => { e.currentTarget.style.boxShadow = 'var(--shadow-sm)'; e.currentTarget.style.transform = 'none' }}>
             <div style={{ position: 'absolute', top: 0, right: 0, width: 96, height: 96, background: s.bg, opacity: 0.6, borderRadius: '0 14px 0 96px', pointerEvents: 'none' }} />
-
-            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
-              {s.label}
-            </div>
-            <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-1)', lineHeight: 1, letterSpacing: -1, marginBottom: 6 }}>
-              {s.val}
-            </div>
+            <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>{s.label}</div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-1)', lineHeight: 1, letterSpacing: -1, marginBottom: 6 }}>{s.val}</div>
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: s.sub2 ? 5 : s.pct !== null ? 8 : 0, display: 'flex', alignItems: 'center', gap: 5 }}>
               {s.sub}
               <TrendBadge pct={s.trend} tx={s.bar} />
             </div>
-            {s.sub2 && (
-              <div style={{ fontSize: 11, fontWeight: 700, color: s.tx, background: s.bg, borderRadius: 6, padding: '3px 8px', display: 'inline-block', marginBottom: 8 }}>
-                {s.sub2}
-              </div>
-            )}
+            {s.sub2 && <div style={{ fontSize: 11, fontWeight: 700, color: s.tx, background: s.bg, borderRadius: 6, padding: '3px 8px', display: 'inline-block', marginBottom: 8 }}>{s.sub2}</div>}
             {s.pct !== null && (
               <div style={{ height: 4, background: 'var(--surface-3)', borderRadius: 99, overflow: 'hidden' }}>
                 <div style={{ width: s.pct + '%', height: '100%', background: s.bar, borderRadius: 99, transition: 'width 0.6s ease' }} />
@@ -562,7 +523,7 @@ export default function Dashboard({ user, setPage }) {
         ))}
       </div>
 
-      {/* ── Goal countdown + pace to close ── */}
+      {/* ── Goal countdown ── */}
       {teamGoal > 0 && (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '16px 20px', marginBottom: 14, boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -581,36 +542,16 @@ export default function Dashboard({ user, setPage }) {
                   </div>
                 </div>
               )}
-              <div style={{ background: premPct >= 100 ? 'var(--success-light)' : premPct >= expectedPct ? '#eff6ff' : 'var(--warning-light)', border: `1px solid ${premPct >= 100 ? '#86efac' : premPct >= expectedPct ? '#bfdbfe' : '#fcd34d'}`, borderRadius: 9999, padding: '4px 12px', fontSize: 13, fontWeight: 700, color: premPct >= 100 ? 'var(--success)' : premPct >= expectedPct ? 'var(--primary)' : 'var(--warning)' }}>
-                {premPct}%
-              </div>
+              <div style={{ background: premPct >= 100 ? 'var(--success-light)' : premPct >= expectedPct ? '#eff6ff' : 'var(--warning-light)', border: `1px solid ${premPct >= 100 ? '#86efac' : premPct >= expectedPct ? '#bfdbfe' : '#fcd34d'}`, borderRadius: 9999, padding: '4px 12px', fontSize: 13, fontWeight: 700, color: premPct >= 100 ? 'var(--success)' : premPct >= expectedPct ? 'var(--primary)' : 'var(--warning)' }}>{premPct}%</div>
             </div>
           </div>
-
-          {/* Progress bar */}
           <div style={{ height: 10, background: 'var(--surface-3)', borderRadius: 99, overflow: 'visible', position: 'relative' }}>
-            {expectedPct > 0 && expectedPct < 100 && (
-              <div style={{ position: 'absolute', top: -3, bottom: -3, left: `${expectedPct}%`, width: 2, background: 'var(--border-2)', borderRadius: 99, zIndex: 2 }} title={`Expected: ${expectedPct}%`} />
-            )}
-            <div style={{
-              height: '100%',
-              width:  Math.min(100, premPct) + '%',
-              background: premPct >= 100
-                ? 'linear-gradient(90deg, #16a34a, #4ade80)'
-                : premPct >= expectedPct
-                  ? 'linear-gradient(90deg, #2563eb, #60a5fa)'
-                  : 'linear-gradient(90deg, #d97706, #fbbf24)',
-              borderRadius: 99,
-              transition:   'width 0.8s cubic-bezier(0.34,1.56,0.64,1)',
-              position:     'relative',
-            }} />
+            {expectedPct > 0 && expectedPct < 100 && <div style={{ position: 'absolute', top: -3, bottom: -3, left: `${expectedPct}%`, width: 2, background: 'var(--border-2)', borderRadius: 99, zIndex: 2 }} title={`Expected: ${expectedPct}%`} />}
+            <div style={{ height: '100%', width: Math.min(100, premPct) + '%', background: premPct >= 100 ? 'linear-gradient(90deg, #16a34a, #4ade80)' : premPct >= expectedPct ? 'linear-gradient(90deg, #2563eb, #60a5fa)' : 'linear-gradient(90deg, #d97706, #fbbf24)', borderRadius: 99, transition: 'width 0.8s cubic-bezier(0.34,1.56,0.64,1)', position: 'relative' }} />
           </div>
-
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
             <span style={{ fontSize: 10, color: 'var(--text-4)' }}>$0</span>
-            {expectedPct > 5 && expectedPct < 95 && (
-              <span style={{ fontSize: 10, color: 'var(--text-4)' }}>Expected {expectedPct}% · {bizElapsed}d of {bizTotal} business days</span>
-            )}
+            {expectedPct > 5 && expectedPct < 95 && <span style={{ fontSize: 10, color: 'var(--text-4)' }}>Expected {expectedPct}% · {bizElapsed}d of {bizTotal} business days</span>}
             <span style={{ fontSize: 10, color: 'var(--text-4)' }}>${teamGoal.toLocaleString()}</span>
           </div>
         </div>
@@ -622,52 +563,31 @@ export default function Dashboard({ user, setPage }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: myMoodToday ? 4 : isAdmin ? 8 : 10 }}>
             <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Morning check-in</span>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              {/* Show tally to everyone (anonymous aggregate) */}
               {(isAdmin || standupTally.fire + standupTally.neutral + standupTally.tired > 0) && (
-                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                  🔥 {standupTally.fire} · 😐 {standupTally.neutral} · 😴 {standupTally.tired}
-                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)' }}>🔥 {standupTally.fire} · 😐 {standupTally.neutral} · 😴 {standupTally.tired}</div>
               )}
-              {isAdmin && (
-                <button onClick={toggleStandup} style={{ fontSize: 10, color: 'var(--text-3)', background: 'none', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 8px', cursor: 'pointer' }}>
-                  Turn off
-                </button>
-              )}
+              {isAdmin && <button onClick={toggleStandup} style={{ fontSize: 10, color: 'var(--text-3)', background: 'none', border: '1px solid var(--border)', borderRadius: 5, padding: '2px 8px', cursor: 'pointer' }}>Turn off</button>}
             </div>
           </div>
-
-          {/* Admin-only: overdue task breakdown */}
           {isAdmin && (() => {
-            const todayStr   = new Date().toISOString().split('T')[0]
-            const agentsOver = members.map(m => ({
-              name:  m.name,
-              count: tasks.filter(t => t.uid === m.id && !t.done && t.due_date && t.due_date < todayStr).length,
-            })).filter(x => x.count > 0)
+            const todayStr = new Date().toISOString().split('T')[0]
+            const agentsOver = members.map(m => ({ name: m.name, count: tasks.filter(t => t.uid === m.id && !t.done && t.due_date && t.due_date < todayStr).length })).filter(x => x.count > 0)
             if (agentsOver.length === 0) return null
             return (
               <div style={{ background: 'var(--danger-light)', border: '1px solid #fca5a5', borderRadius: 7, padding: '7px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: '#991b1b' }}>⚠ Overdue tasks:</span>
-                {agentsOver.map(a => (
-                  <span key={a.name} style={{ fontSize: 11, color: '#7f1d1d', background: 'rgba(220,38,38,0.1)', borderRadius: 99, padding: '2px 8px' }}>
-                    {a.name} · {a.count}
-                  </span>
-                ))}
+                {agentsOver.map(a => <span key={a.name} style={{ fontSize: 11, color: '#7f1d1d', background: 'rgba(220,38,38,0.1)', borderRadius: 99, padding: '2px 8px' }}>{a.name} · {a.count}</span>)}
               </div>
             )
           })()}
-
           {myMoodToday ? (
-            <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
-              ✓ Checked in — {myMoodToday === 'fire' ? '🔥 Fired up' : myMoodToday === 'neutral' ? '😐 Neutral' : '😴 Low energy'}
-            </div>
+            <div style={{ fontSize: 13, color: '#16a34a', fontWeight: 500 }}>✓ Checked in — {myMoodToday === 'fire' ? '🔥 Fired up' : myMoodToday === 'neutral' ? '😐 Neutral' : '😴 Low energy'}</div>
           ) : !isAdmin ? (
             <div>
               <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 9 }}>How's your energy today?</div>
               <div style={{ display: 'flex', gap: 9 }}>
                 {[{ key: 'fire', label: '🔥 Fired up' }, { key: 'neutral', label: '😐 Neutral' }, { key: 'tired', label: '😴 Low energy' }].map(opt => (
-                  <button key={opt.key} onClick={() => submitStandup(opt.key)} style={{ flex: 1, padding: '8px 0', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface-2)', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-2)', fontFamily: 'inherit' }}>
-                    {opt.label}
-                  </button>
+                  <button key={opt.key} onClick={() => submitStandup(opt.key)} style={{ flex: 1, padding: '8px 0', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--surface-2)', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-2)', fontFamily: 'inherit' }}>{opt.label}</button>
                 ))}
               </div>
             </div>
@@ -676,62 +596,31 @@ export default function Dashboard({ user, setPage }) {
       )}
       {isAdmin && !standupEnabled && (
         <div style={{ marginBottom: 14 }}>
-          <button onClick={toggleStandup} style={{ fontSize: 11, color: 'var(--text-3)', background: 'none', border: '1px dashed var(--border-2)', borderRadius: 7, padding: '5px 13px', cursor: 'pointer' }}>
-            + Turn on morning check-in
-          </button>
+          <button onClick={toggleStandup} style={{ fontSize: 11, color: 'var(--text-3)', background: 'none', border: '1px dashed var(--border-2)', borderRadius: 7, padding: '5px 13px', cursor: 'pointer' }}>+ Turn on morning check-in</button>
         </div>
       )}
 
-      {/* ── Main grid: leaderboard + right column ── */}
+      {/* ── Main grid ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: 12 }}>
-
-        {/* Leaderboard */}
         <Card>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>Sales leaderboard</span>
-              {/* Personal rank indicator for agents */}
-              {!isAdmin && myRank > 0 && myRank > 3 && (
-                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--primary)', background: 'var(--primary-light)', padding: '2px 8px', borderRadius: 99 }}>
-                  You're #{myRank}
-                </span>
-              )}
+              {!isAdmin && myRank > 0 && myRank > 3 && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--primary)', background: 'var(--primary-light)', padding: '2px 8px', borderRadius: 99 }}>You're #{myRank}</span>}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <span style={{ fontSize: 11, color: 'var(--text-3)' }}>by premium</span>
               <button onClick={() => setPage('sales')} style={{ fontSize: 11, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>View all →</button>
             </div>
           </div>
-
-          {/* Podium top 3 — premium upgrade */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 14, alignItems: 'flex-end' }}>
             {lbData.slice(0, 3).map((item, i) => {
               const c     = PODIUM_COLORS[i]
               const isMe  = item.m.id === user.id
               const minH  = [200, 165, 145][i]
               return (
-                <div key={item.m.id} style={{
-                  background:     c.bg,
-                  border:         `1.5px solid ${c.border}`,
-                  borderRadius:   14,
-                  padding:        i === 0 ? '22px 12px 18px' : i === 1 ? '16px 12px' : '12px',
-                  minHeight:      minH,
-                  textAlign:      'center',
-                  position:       'relative',
-                  boxShadow:      i === 0 ? '0 8px 28px rgba(251,191,36,0.35), 0 2px 8px rgba(251,191,36,0.15)' : 'var(--shadow-xs)',
-                  transition:     'transform 0.2s, box-shadow 0.2s',
-                  display:        'flex',
-                  flexDirection:  'column',
-                  alignItems:     'center',
-                  justifyContent: 'center',
-                  gap:            i === 0 ? 6 : 4,
-                }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; if (i === 0) e.currentTarget.style.boxShadow = '0 14px 36px rgba(251,191,36,0.4)' }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'none'; if (i === 0) e.currentTarget.style.boxShadow = '0 8px 28px rgba(251,191,36,0.35), 0 2px 8px rgba(251,191,36,0.15)' }}
-                >
-                  {isMe && (
-                    <div style={{ position: 'absolute', top: 8, right: 9, fontSize: 9, fontWeight: 700, color: c.tx, background: 'rgba(0,0,0,0.12)', padding: '2px 7px', borderRadius: 99 }}>YOU</div>
-                  )}
+                <div key={item.m.id} style={{ background: c.bg, border: `1.5px solid ${c.border}`, borderRadius: 14, padding: i === 0 ? '22px 12px 18px' : i === 1 ? '16px 12px' : '12px', minHeight: minH, textAlign: 'center', position: 'relative', boxShadow: i === 0 ? '0 8px 28px rgba(251,191,36,0.35), 0 2px 8px rgba(251,191,36,0.15)' : 'var(--shadow-xs)', transition: 'transform 0.2s, box-shadow 0.2s', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: i === 0 ? 6 : 4 }} onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; if (i === 0) e.currentTarget.style.boxShadow = '0 14px 36px rgba(251,191,36,0.4)' }} onMouseLeave={e => { e.currentTarget.style.transform = 'none'; if (i === 0) e.currentTarget.style.boxShadow = '0 8px 28px rgba(251,191,36,0.35), 0 2px 8px rgba(251,191,36,0.15)' }}>
+                  {isMe && <div style={{ position: 'absolute', top: 8, right: 9, fontSize: 9, fontWeight: 700, color: c.tx, background: 'rgba(0,0,0,0.12)', padding: '2px 7px', borderRadius: 99 }}>YOU</div>}
                   <div style={{ fontSize: i === 0 ? 32 : 22 }}>{c.medal}</div>
                   <div style={{ width: i === 0 ? 44 : 33, height: i === 0 ? 44 : 33, borderRadius: '50%', background: 'rgba(0,0,0,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: i === 0 ? 14 : 11, fontWeight: 700, color: c.tx }}>{item.m.ini}</div>
                   <div style={{ fontSize: i === 0 ? 14 : 12, fontWeight: 700, color: c.tx }}>{item.m.name}</div>
@@ -741,15 +630,10 @@ export default function Dashboard({ user, setPage }) {
               )
             })}
           </div>
-
-          {/* Remaining agents — bridged styling */}
           {lbData.slice(3).map((item, i) => {
             const isMe = item.m.id === user.id
             return (
-              <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border)', background: isMe ? 'var(--primary-light)' : i % 2 === 0 ? 'transparent' : 'var(--surface-2)', padding: '9px 10px', borderRadius: isMe ? 8 : 0, margin: isMe ? '0 -2px' : 0, transition: 'background 0.15s' }}
-                onMouseEnter={e => { if (!isMe) e.currentTarget.style.background = 'var(--surface-2)' }}
-                onMouseLeave={e => { if (!isMe) e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'var(--surface-2)' }}
-              >
+              <div key={item.m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderTop: '1px solid var(--border)', background: isMe ? 'var(--primary-light)' : i % 2 === 0 ? 'transparent' : 'var(--surface-2)', padding: '9px 10px', borderRadius: isMe ? 8 : 0, margin: isMe ? '0 -2px' : 0, transition: 'background 0.15s' }} onMouseEnter={e => { if (!isMe) e.currentTarget.style.background = 'var(--surface-2)' }} onMouseLeave={e => { if (!isMe) e.currentTarget.style.background = i % 2 === 0 ? 'transparent' : 'var(--surface-2)' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-4)', width: 18, fontWeight: 600, textAlign: 'center' }}>{i + 4}</span>
                 <div style={{ width: 28, height: 28, borderRadius: '50%', background: isMe ? 'var(--primary)' : 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: isMe ? '#fff' : 'var(--text-2)', flexShrink: 0 }}>{item.m.ini}</div>
                 <span style={{ fontSize: 13, flex: 1, color: 'var(--text-1)', fontWeight: isMe ? 700 : 500 }}>
@@ -763,10 +647,7 @@ export default function Dashboard({ user, setPage }) {
           })}
         </Card>
 
-        {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-
-          {/* Team progress / My tasks */}
           <Card style={{ flex: 1 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)' }}>{isAdmin ? 'Team progress' : 'My tasks'}</span>
@@ -801,33 +682,23 @@ export default function Dashboard({ user, setPage }) {
             ))}
           </Card>
 
-          {/* Quote of the day */}
           <div style={{ background: N, borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <div style={{ fontSize: 10, fontWeight: 500, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: 0.5 }}>Quote of the day</div>
               {isAdmin && !editingQuote && (
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => setShowQuoteHistory(true)} style={{ background: 'rgba(255,255,255,.1)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 5, color: 'rgba(255,255,255,.65)', fontSize: 10, padding: '3px 9px', cursor: 'pointer' }}>
-                    🕒 History
-                  </button>
-                  <button onClick={() => { setQuoteDraft({ text: quoteText, author: quoteAuthor }); setEditingQuote(true) }} style={{ background: 'rgba(255,255,255,.12)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 5, color: 'rgba(255,255,255,.7)', fontSize: 10, padding: '3px 9px', cursor: 'pointer' }}>
-                    ✏ Edit
-                  </button>
+                  <button onClick={() => setShowQuoteHistory(true)} style={{ background: 'rgba(255,255,255,.1)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 5, color: 'rgba(255,255,255,.65)', fontSize: 10, padding: '3px 9px', cursor: 'pointer' }}>🕒 History</button>
+                  <button onClick={() => { setQuoteDraft({ text: quoteText, author: quoteAuthor }); setEditingQuote(true) }} style={{ background: 'rgba(255,255,255,.12)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 5, color: 'rgba(255,255,255,.7)', fontSize: 10, padding: '3px 9px', cursor: 'pointer' }}>✏ Edit</button>
                 </div>
               )}
             </div>
-
             {editingQuote ? (
               <div>
                 <textarea value={quoteDraft.text} onChange={e => setQuoteDraft(d => ({ ...d, text: e.target.value }))} rows={3} style={{ width: '100%', background: 'rgba(255,255,255,.12)', border: '.5px solid rgba(255,255,255,.25)', borderRadius: 7, color: '#fff', fontSize: 13, padding: '8px 10px', resize: 'none', outline: 'none', marginBottom: 8, fontFamily: 'inherit', lineHeight: 1.6 }} />
                 <input value={quoteDraft.author} onChange={e => setQuoteDraft(d => ({ ...d, author: e.target.value }))} placeholder="— Author (optional)" style={{ width: '100%', background: 'rgba(255,255,255,.12)', border: '.5px solid rgba(255,255,255,.25)', borderRadius: 7, color: 'rgba(255,255,255,.75)', fontSize: 12, padding: '7px 10px', outline: 'none', marginBottom: 10, fontFamily: 'inherit' }} />
                 <div style={{ display: 'flex', gap: 7 }}>
-                  <button onClick={saveQuote} disabled={savingQuote} style={{ flex: 1, background: '#fff', border: 'none', borderRadius: 7, color: N, fontSize: 12, fontWeight: 600, padding: '7px 0', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    {savingQuote ? 'Saving…' : 'Save'}
-                  </button>
-                  <button onClick={() => setEditingQuote(false)} style={{ background: 'rgba(255,255,255,.1)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 7, color: 'rgba(255,255,255,.6)', fontSize: 12, padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    Cancel
-                  </button>
+                  <button onClick={saveQuote} disabled={savingQuote} style={{ flex: 1, background: '#fff', border: 'none', borderRadius: 7, color: N, fontSize: 12, fontWeight: 600, padding: '7px 0', cursor: 'pointer', fontFamily: 'inherit' }}>{savingQuote ? 'Saving…' : 'Save'}</button>
+                  <button onClick={() => setEditingQuote(false)} style={{ background: 'rgba(255,255,255,.1)', border: '.5px solid rgba(255,255,255,.2)', borderRadius: 7, color: 'rgba(255,255,255,.6)', fontSize: 12, padding: '7px 14px', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                 </div>
               </div>
             ) : (
@@ -838,7 +709,6 @@ export default function Dashboard({ user, setPage }) {
             )}
           </div>
 
-          {/* ── Activity feed ── */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px' }}>
             <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-1)', marginBottom: 12 }}>Team activity</div>
             {activityFeed.length === 0 ? (
@@ -863,10 +733,7 @@ export default function Dashboard({ user, setPage }) {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.4 }}>
                           <span style={{ fontWeight: 600 }}>{profile?.name || 'Someone'}</span>
-                          {isSale
-                            ? <> logged a sale — {item.policy_type} · <span style={{ color: 'var(--success)', fontWeight: 700 }}>${(item.premium || 0).toLocaleString()}</span>{item.is_split && <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: 4 }}>(split)</span>}</>
-                            : <> · <span style={{ fontWeight: 600 }}>{item.client}</span> left a review</>
-                          }
+                          {isSale ? <> logged a sale — {item.policy_type} · <span style={{ color: 'var(--success)', fontWeight: 700 }}>${(item.premium || 0).toLocaleString()}</span>{item.is_split && <span style={{ fontSize: 10, color: 'var(--text-4)', marginLeft: 4 }}>(split)</span>}</> : <> · <span style={{ fontWeight: 600 }}>{item.client}</span> left a review</>}
                         </div>
                         <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2 }}>{timeAgo}</div>
                       </div>
@@ -879,7 +746,7 @@ export default function Dashboard({ user, setPage }) {
         </div>
       </div>
 
-      {/* ── Modals ── */}
+      {/* Modals */}
       {editingAnnouncement && (
         <Modal title="Post announcement" onClose={() => setEditingAnnouncement(false)}>
           <Field label="Announcement text">
@@ -892,10 +759,7 @@ export default function Dashboard({ user, setPage }) {
         </Modal>
       )}
 
-      {showQuoteHistory && (
-        <QuoteHistoryModal history={quoteHistory} onClose={() => setShowQuoteHistory(false)} />
-      )}
-
+      {showQuoteHistory && <QuoteHistoryModal history={quoteHistory} onClose={() => setShowQuoteHistory(false)} />}
       {showGoalToast && <GoalToast onDone={() => setShowGoalToast(false)} />}
     </div>
   )
