@@ -1,5 +1,5 @@
 // ============================================================
-// Castro Agency Hub — Sales
+// Castro Agency Hub — Sales (Protected Production Version)
 // Place this file at: src/components/Sales.jsx
 // ============================================================
 import { useState, useEffect } from 'react'
@@ -34,7 +34,6 @@ const LEAD_SOURCE_COLORS = {
   'Other':                     { bg:'#f3f4f6', tx:'#374151' },
 }
 
-// ── Helpers ───────────────────────────────────────────────────
 function currentMonthKey() {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}`
@@ -63,7 +62,6 @@ function calcStreak(sales, uid) {
 
 function fmt(n) { return Number(n || 0).toLocaleString() }
 
-// ── Sale toast ────────────────────────────────────────────────
 function SaleToast({ sale, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t) }, [])
   return (
@@ -76,7 +74,6 @@ function SaleToast({ sale, onDone }) {
   )
 }
 
-// ── My Goal Card (agent view) ─────────────────────────────────
 function MyGoalCard({ sales, acts, goals, userId, weekSales, weekActs }) {
   const g        = goals[userId] || { policies:8, premium:10000, quotes:30, weekly_policies:2, weekly_premium:2500, weekly_quotes:8 }
   const myItems  = sales.reduce((s, x) => s + (x.items || 1), 0)
@@ -118,7 +115,6 @@ function MyGoalCard({ sales, acts, goals, userId, weekSales, weekActs }) {
   )
 }
 
-// ── Main export ───────────────────────────────────────────────
 export default function Sales({ user }) {
   const [tab,           setTab]          = useState('Leaderboard')
   const [sales,         setSales]        = useState([])
@@ -131,7 +127,6 @@ export default function Sales({ user }) {
   const [loading,       setLoading]      = useState(true)
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey)
 
-  // Forms
   const [editGoal,  setEditGoal]  = useState(null)
   const [gForm,     setGForm]     = useState({ monthly_items:'', monthly_premium:'', monthly_quotes:'', weekly_items:'', weekly_premium:'', weekly_quotes:'' })
   const [sForm,     setSForm]     = useState({ uid:'', client:'', pt:'Auto', premium:'', items:1 })
@@ -139,18 +134,18 @@ export default function Sales({ user }) {
   const [lForm,     setLForm]     = useState({ name:'', phone:'', source:'BP', notes:'' })
   const [saving,    setSaving]    = useState(false)
 
-  // Edit / delete sale
   const [editingSale,   setEditingSale]   = useState(null)
   const [editSaleForm,  setEditSaleForm]  = useState({})
   const [savingEdit,    setSavingEdit]    = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(null)
+  
+  // Safe Mutation state handles confirmations before writing to cloud DB
+  const [pendingLeadUpdate, setPendingLeadUpdate] = useState(null)
 
-  // Lead UI
   const [leadFilter,       setLeadFilter]       = useState('All')
   const [leadSourceFilter, setLeadSourceFilter] = useState('All')
   const [leadExpanded,     setLeadExpanded]     = useState(null)
 
-  // UI
   const [saleToast,   setSaleToast]   = useState(null)
   const [showItemDef, setShowItemDef] = useState(false)
 
@@ -169,6 +164,7 @@ export default function Sales({ user }) {
   const weekStart = new Date(now); weekStart.setDate(diff); weekStart.setHours(0,0,0,0)
   const weekStartISO = weekStart.toISOString()
 
+  useEffect(() => { const members = profiles.filter(p => p.role === 'member'); if (members.length > 0) { const def = isAdmin ? members[0].id : user.id; setSForm(f => ({ ...f, uid:def })); setIaForm(f => ({ ...f, uid:def })) } }, [profiles])
   useEffect(() => { fetchStaticData() }, [])
   useEffect(() => { fetchMonthData()  }, [selectedMonth])
 
@@ -198,16 +194,6 @@ export default function Sales({ user }) {
     setItemsAdded(ia.data || [])
   }
 
-  useEffect(() => {
-    const members = profiles.filter(p => p.role === 'member')
-    if (members.length > 0) {
-      const def = isAdmin ? members[0].id : user.id
-      setSForm(f => ({ ...f, uid:def }))
-      setIaForm(f => ({ ...f, uid:def }))
-    }
-  }, [profiles])
-
-  // ── Add sale ──────────────────────────────────────────────────
   async function addSale() {
     if (!sForm.client.trim() || !sForm.premium) return
     setSaving(true)
@@ -224,7 +210,6 @@ export default function Sales({ user }) {
       setSaleToast({ client:sForm.client, premium:sForm.premium })
       await logAudit({ user, action:'INSERT', table:'sales', record_id:data.id, new_data:data })
 
-      // Notify all teammates (mandatory — no opt-out)
       const agentProfile = profiles.find(p => p.id === uid)
       const agentName    = agentProfile?.name || user.name
       const notifPayload = profiles
@@ -233,7 +218,7 @@ export default function Sales({ user }) {
           to_uid:     p.id,
           type:       'sale',
           title:      `${agentName} just closed a sale! 🎯`,
-          body:       `${sForm.client} · ${sForm.pt} · $${Number(sForm.premium).toLocaleString()}`,
+          body:       `${sForm.client} · {sForm.pt} · $${Number(sForm.premium).toLocaleString()}`,
           nav_target: 'sales',
           read:       false,
         }))
@@ -245,7 +230,6 @@ export default function Sales({ user }) {
     setSaving(false)
   }
 
-  // ── Edit sale ─────────────────────────────────────────────────
   function openEditSale(sale) {
     setEditingSale(sale)
     setEditSaleForm({ client:sale.client, pt:sale.policy_type, premium:sale.premium, items:sale.items || 1 })
@@ -263,7 +247,6 @@ export default function Sales({ user }) {
     setSavingEdit(false)
   }
 
-  // ── Delete sale ───────────────────────────────────────────────
   async function deleteSale(sale) {
     await supabase.from('sales').delete().eq('id', sale.id)
     setSales(ss => ss.filter(s => s.id !== sale.id))
@@ -271,7 +254,6 @@ export default function Sales({ user }) {
     setConfirmDelete(null)
   }
 
-  // ── Items added ───────────────────────────────────────────────
   async function addItemAdded() {
     if (!iaForm.client.trim()) return
     setSaving(true)
@@ -282,7 +264,6 @@ export default function Sales({ user }) {
     setSaving(false)
   }
 
-  // ── Lead returns ──────────────────────────────────────────────
   async function addLead() {
     if (!lForm.name.trim() || !lForm.phone.trim()) return
     setSaving(true)
@@ -292,9 +273,11 @@ export default function Sales({ user }) {
     setSaving(false)
   }
 
-  async function updateLeadStatus(id, status) {
-    await supabase.from('lead_returns').update({ status }).eq('id', id)
-    setLeads(ls => ls.map(l => l.id === id ? { ...l, status } : l))
+  // Safe verification proxy routes mutations through review intercept modals
+  async function executeLeadStatusUpdate(id, nextStatus) {
+    await supabase.from('lead_returns').update({ status: nextStatus }).eq('id', id)
+    setLeads(ls => ls.map(l => l.id === id ? { ...l, status: nextStatus } : r))
+    setPendingLeadUpdate(null)
   }
 
   async function updateLeadNotes(id, notes) {
@@ -308,7 +291,6 @@ export default function Sales({ user }) {
     setConfirmDelete(null)
   }
 
-  // ── Goals ─────────────────────────────────────────────────────
   async function saveGoal() {
     if (!editGoal) return
     const payload = {
@@ -346,7 +328,6 @@ export default function Sales({ user }) {
 
   const members = profiles.filter(p => p.role === 'member')
 
-  // Leaderboard data
   const lbData = members.map(m => {
     const ms     = sales.filter(s => s.uid === m.id)
     const ma     = acts.filter(a => a.uid === m.id)
@@ -370,13 +351,11 @@ export default function Sales({ user }) {
   const myWeekSales = weekSales.filter(s => s.uid === user.id)
   const myWeekActs  = weekActs.filter(a => a.uid === user.id)
 
-  // Commission tab intentionally hidden
   const tabs = ['Leaderboard', 'Log sale', 'Items added', 'Lead Returns', ...(isAdmin ? ['Goals'] : [])]
 
   return (
     <>
       <div style={{ padding:20 }}>
-
         {/* Header */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
           <div>
@@ -386,10 +365,7 @@ export default function Sales({ user }) {
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             {(isAdmin || sales.length > 0) && (
               <Btn sm variant="outline" onClick={() => {
-                const rows = sales.map(s => {
-                  const agent = profiles.find(p => p.id === s.uid)
-                  return [new Date(s.created_at).toLocaleDateString('en-US'), agent?.name||'Unknown', s.client, s.policy_type, s.premium, s.items||1]
-                })
+                const rows = sales.map(s => { const agent = profiles.find(p => p.id === s.uid); return [new Date(s.created_at).toLocaleDateString('en-US'), agent?.name||'Unknown', s.client, s.policy_type, s.premium, s.items||1] })
                 exportCSV(`sales-${selectedMonth}.csv`, ['Date','Agent','Client','Policy Type','Premium ($)','Items'], rows)
               }}>⬇ Export CSV</Btn>
             )}
@@ -406,13 +382,10 @@ export default function Sales({ user }) {
 
         <TabBar tabs={tabs} active={tab} setActive={setTab} />
 
-        {/* ── LEADERBOARD ── */}
+        {/* ── TAB 1: LEADERBOARD ── */}
         {tab === 'Leaderboard' && (
           <>
-            {!isAdmin && (
-              <MyGoalCard sales={mySales} acts={myActs} goals={goals} userId={user.id} weekSales={myWeekSales} weekActs={myWeekActs} />
-            )}
-
+            {!isAdmin && <MyGoalCard sales={mySales} acts={myActs} goals={goals} userId={user.id} weekSales={myWeekSales} weekActs={myWeekActs} />}
             <Card p={0}>
               {lbData.length === 0 ? <EmptyState text="No sales data for this month." icon="🏆" /> : (
                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
@@ -431,9 +404,7 @@ export default function Sales({ user }) {
                         <tr key={m.id} style={{ borderTop:'1px solid var(--border)', background: isMe ? 'var(--primary-light)' : 'transparent' }}>
                           <td style={{ padding:'9px 12px', fontSize:14 }}>{MEDALS[i] || (i+1)}</td>
                           <td style={{ padding:'9px 12px' }}>
-                            <div style={{ fontSize:12, fontWeight:isMe?700:500, color:'var(--text-1)' }}>
-                              {m.name}{isMe && <span style={{ fontSize:9, color:N, marginLeft:5, fontWeight:700 }}>YOU</span>}
-                            </div>
+                            <div style={{ fontSize:12, fontWeight:isMe?700:500, color:'var(--text-1)' }}>{m.name}{isMe && <span style={{ fontSize:9, color:N, marginLeft:5, fontWeight:700 }}>YOU</span>}</div>
                             <div style={{ fontSize:10, color:'var(--text-4)' }}>{m.title}</div>
                           </td>
                           <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{items}</td>
@@ -456,7 +427,7 @@ export default function Sales({ user }) {
           </>
         )}
 
-        {/* ── LOG SALE ── */}
+        {/* ── TAB 2: LOG SALE ── */}
         {tab === 'Log sale' && (
           <Card>
             {isThisMonth && (
@@ -470,66 +441,42 @@ export default function Sales({ user }) {
                       </select>
                     </Field>
                   )}
-                  <Field label="Client name *">
-                    <input style={IS} value={sForm.client} onChange={e => setSForm(f => ({ ...f, client:e.target.value }))} placeholder="e.g. Smith, John" />
-                  </Field>
+                  <Field label="Client name *"><input style={IS} value={sForm.client} onChange={e => setSForm(f => ({ ...f, client:e.target.value }))} placeholder="e.g. Smith, John" /></Field>
                   <Field label="Item type">
                     <select style={IS} value={sForm.pt} onChange={e => setSForm(f => ({ ...f, pt:e.target.value }))}>
                       {ITEM_TYPES.map(o => <option key={o}>{o}</option>)}
                     </select>
                   </Field>
-                  <Field label="Premium ($)">
-                    <input style={IS} type="number" value={sForm.premium} onChange={e => setSForm(f => ({ ...f, premium:e.target.value }))} placeholder="e.g. 1200" />
-                  </Field>
-                  <Field label={
-                    <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                      <span>Item count</span>
-                      <button onClick={() => setShowItemDef(s => !s)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, color:'var(--text-3)', padding:0 }} title="What counts as an item?">ℹ️</button>
-                    </div>
-                  }>
-                    <input style={IS} type="number" min="1" value={sForm.items} onChange={e => setSForm(f => ({ ...f, items:e.target.value }))} placeholder="1" />
-                  </Field>
+                  <Field label="Premium ($)"><input style={IS} type="number" value={sForm.premium} onChange={e => setSForm(f => ({ ...f, premium:e.target.value }))} placeholder="e.g. 1200" /></Field>
+                  <Field label={<div style={{ display:'flex', alignItems:'center', gap:6 }}><span>Item count</span><button onClick={() => setShowItemDef(s => !s)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:13, color:'var(--text-3)', padding:0 }}>ℹ️</button></div>}><input style={IS} type="number" min="1" value={sForm.items} onChange={e => setSForm(f => ({ ...f, items:e.target.value }))} placeholder="1" /></Field>
                 </div>
-
                 {showItemDef && (
                   <div style={{ background:'var(--primary-light)', border:'1px solid var(--primary-mid)', borderRadius:8, padding:'10px 14px', marginBottom:12, fontSize:12, color:'#1e40af', lineHeight:1.7 }}>
                     <div style={{ fontWeight:600, marginBottom:4 }}>How to count items:</div>
-                    <div>• 1 car = <strong>1 item</strong></div>
-                    <div>• Home policy alone = <strong>1 item</strong></div>
-                    <div>• Auto with 2 cars = <strong>2 items</strong></div>
-                    <div>• Home Bundle (Home + Auto, 1 car) = <strong>2 items</strong></div>
-                    <div>• Home Bundle (Home + Auto, 2 cars) = <strong>3 items</strong></div>
-                    <div>• Auto + Renters Bundle = <strong>2 items</strong></div>
+                    <div>• 1 car = <strong>1 item</strong> · • Auto with 2 cars = <strong>2 items</strong><br />• Home Bundle (Home + Auto, 2 cars) = <strong>3 items</strong></div>
                   </div>
                 )}
-
                 <Btn onClick={addSale} disabled={saving}>{saving ? 'Saving…' : '🎯 Log sale'}</Btn>
               </>
             )}
-
             {sales.length > 0 && (
               <div style={{ marginTop:16 }}>
-                <div style={{ fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>
-                  {isThisMonth ? 'Recent sales' : `All sales — ${monthLabel}`}
-                </div>
+                <div style={{ fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.5, marginBottom:8 }}>{isThisMonth ? 'Recent sales' : `All sales — ${monthLabel}`}</div>
                 {sales.map(s => {
-                  const m       = profiles.find(p => p.id === s.uid)
-                  const canEdit = isAdmin || s.uid === user.id
+                  const m = profiles.find(p => p.id === s.uid); const canEdit = isAdmin || s.uid === user.id
                   return (
                     <div key={s.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
                       <div>
                         <div style={{ fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{s.client}</div>
-                        <div style={{ fontSize:11, color:'var(--text-3)' }}>
-                          {m?.name} · {new Date(s.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })} · {s.items||1} item{(s.items||1)!==1?'s':''}
-                        </div>
+                        <div style={{ fontSize:11, color:'var(--text-3)' }}>{m?.name} · {new Date(s.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' })} · {s.items||1} item{(s.items||1)!==1?'s':''}</div>
                       </div>
                       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                         <Chip label={s.policy_type} />
                         <div style={{ fontSize:12, fontWeight:500, color:'#166534' }}>${(s.premium||0).toLocaleString()}</div>
                         {canEdit && (
                           <div style={{ display:'flex', gap:4 }}>
-                            <button onClick={() => openEditSale(s)} style={{ border:'none', background:'none', cursor:'pointer', color:'var(--text-4)', fontSize:13, padding:'2px 4px' }}>✏️</button>
-                            <button onClick={() => setConfirmDelete(s)} style={{ border:'none', background:'none', cursor:'pointer', color:'#ef4444', fontSize:13, padding:'2px 4px' }}>🗑</button>
+                            <button onClick={() => openEditSale(s)} style={{ border:'none', background:'none', cursor:'pointer', color:'var(--text-4)', fontSize:13 }}>✏️</button>
+                            <button onClick={() => setConfirmDelete(s)} style={{ border:'none', background:'none', cursor:'pointer', color:'#ef4444', fontSize:13 }}>🗑</button>
                           </div>
                         )}
                       </div>
@@ -541,12 +488,10 @@ export default function Sales({ user }) {
           </Card>
         )}
 
-        {/* ── ITEMS ADDED ── */}
+        {/* ── TAB 3: ITEMS ADDED ── */}
         {tab === 'Items added' && (
           <div>
-            <div style={{ background:'var(--primary-light)', border:'1px solid var(--primary-mid)', borderRadius:8, padding:'9px 13px', fontSize:12, color:'#1e40af', marginBottom:14 }}>
-              Log items added to existing policies — like a new vehicle, driver, or property added to a current client's account.
-            </div>
+            <div style={{ background:'var(--primary-light)', border:'1px solid var(--primary-mid)', borderRadius:8, padding:'9px 13px', fontSize:12, color:'#1e40af', marginBottom:14 }}>Log items added to existing policies — like a new vehicle, driver, or property added to a current account.</div>
             {isThisMonth && (
               <Card mb={14}>
                 <div style={{ fontSize:13, fontWeight:500, color:'var(--text-1)', marginBottom:12 }}>Log an item added</div>
@@ -558,17 +503,13 @@ export default function Sales({ user }) {
                       </select>
                     </Field>
                   )}
-                  <Field label="Client name *">
-                    <input style={IS} value={iaForm.client} onChange={e => setIaForm(f => ({ ...f, client:e.target.value }))} placeholder="e.g. Smith, John" />
-                  </Field>
+                  <Field label="Client name *"><input style={IS} value={iaForm.client} onChange={e => setIaForm(f => ({ ...f, client:e.target.value }))} placeholder="e.g. Smith, John" /></Field>
                   <Field label="What was added">
                     <select style={IS} value={iaForm.item_type} onChange={e => setIaForm(f => ({ ...f, item_type:e.target.value }))}>
                       {ITEMS_ADDED_TYPES.map(o => <option key={o}>{o}</option>)}
                     </select>
                   </Field>
-                  <Field label="Notes">
-                    <input style={IS} value={iaForm.notes} onChange={e => setIaForm(f => ({ ...f, notes:e.target.value }))} placeholder="Optional…" />
-                  </Field>
+                  <Field label="Notes"><input style={IS} value={iaForm.notes} onChange={e => setIaForm(f => ({ ...f, notes:e.target.value }))} placeholder="Optional…" /></Field>
                 </div>
                 <Btn onClick={addItemAdded} disabled={saving}>{saving ? 'Saving…' : '+ Log item'}</Btn>
               </Card>
@@ -603,7 +544,7 @@ export default function Sales({ user }) {
           </div>
         )}
 
-        {/* ── LEAD RETURNS ── */}
+        {/* ── TAB 4: LEAD RETURNS ── */}
         {tab === 'Lead Returns' && (
           <div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 185px', gap:12 }}>
@@ -624,47 +565,30 @@ export default function Sales({ user }) {
                     <Btn onClick={addLead} disabled={saving}>{saving ? 'Saving…' : '+ Log lead return'}</Btn>
                   </Card>
                 )}
-
-                {/* Filter pills */}
                 <div style={{ display:'flex', gap:5, marginBottom:8, flexWrap:'wrap' }}>
-                  {['All', ...LEAD_STATUSES].map(s => (
-                    <button key={s} onClick={() => setLeadFilter(s)} style={{ padding:'3px 10px', borderRadius:99, border:'none', cursor:'pointer', fontSize:11, fontWeight:500, background:leadFilter===s?N:'var(--surface-3)', color:leadFilter===s?'#fff':'var(--text-3)' }}>{s}</button>
-                  ))}
+                  {['All', ...LEAD_STATUSES].map(s => <button key={s} onClick={() => setLeadFilter(s)} style={{ padding:'3px 10px', borderRadius:99, border:'none', cursor:'pointer', fontSize:11, fontWeight:500, background:leadFilter===s?N:'var(--surface-3)', color:leadFilter===s?'#fff':'var(--text-3)' }}>{s}</button>)}
                 </div>
                 <div style={{ display:'flex', gap:5, marginBottom:10, flexWrap:'wrap' }}>
-                  {['All', ...LEAD_SOURCES].map(s => {
-                    const sc = LEAD_SOURCE_COLORS[s]
-                    const act = leadSourceFilter === s
-                    return (
-                      <button key={s} onClick={() => setLeadSourceFilter(s)} style={{ padding:'3px 10px', borderRadius:99, border:'none', cursor:'pointer', fontSize:10, fontWeight:500, background:act?(sc?.bg||N):'var(--surface-3)', color:act?(sc?.tx||'#fff'):'var(--text-3)' }}>{s}</button>
-                    )
-                  })}
+                  {['All', ...LEAD_SOURCES].map(s => { const sc = LEAD_SOURCE_COLORS[s]; const act = leadSourceFilter === s; return <button key={s} onClick={() => setLeadSourceFilter(s)} style={{ padding:'3px 10px', borderRadius:99, border:'none', cursor:'pointer', fontSize:10, fontWeight:500, background:act?(sc?.bg||N):'var(--surface-3)', color:act?(sc?.tx||'#fff'):'var(--text-3)' }}>{s}</button> })}
                 </div>
-
                 <Card p={0}>
                   {filteredLeads.length === 0 ? <EmptyState text="No lead returns match this filter." icon="↩" /> : (
                     <table style={{ width:'100%', borderCollapse:'collapse' }}>
                       <thead>
                         <tr style={{ background:'var(--surface-2)' }}>
-                          {['Name','Phone','Source','Status','Logged','Notes',''].map(h => (
-                            <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
-                          ))}
+                          {['Name','Phone','Source','Status','Logged','Notes',''].map(h => <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>)}
                         </tr>
                       </thead>
                       <tbody>
                         {filteredLeads.map(l => {
-                          const sc  = LEAD_STATUS_COLORS[l.status] || {}
-                          const src = LEAD_SOURCE_COLORS[l.source] || {}
-                          const isExp = leadExpanded === l.id
+                          const sc = LEAD_STATUS_COLORS[l.status] || {}; const src = LEAD_SOURCE_COLORS[l.source] || {}; const isExp = leadExpanded === l.id
                           return [
-                            <tr key={l.id} onClick={() => setLeadExpanded(isExp ? null : l.id)} style={{ borderTop:'1px solid var(--border)', cursor:'pointer' }}
-                              onMouseEnter={e => e.currentTarget.style.background='var(--surface-2)'}
-                              onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                            <tr key={l.id} onClick={() => setLeadExpanded(isExp ? null : l.id)} style={{ borderTop:'1px solid var(--border)', cursor:'pointer' }}>
                               <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{l.name}</td>
                               <td style={{ padding:'9px 12px', fontSize:11, color:'var(--text-3)' }}>{l.phone}</td>
                               <td style={{ padding:'9px 12px' }}><span style={{ fontSize:10, fontWeight:500, padding:'2px 7px', borderRadius:99, background:src.bg||'#f3f4f6', color:src.tx||'#374151' }}>{l.source}</span></td>
                               <td style={{ padding:'9px 12px' }}>
-                                <select value={l.status} onChange={e => { e.stopPropagation(); updateLeadStatus(l.id, e.target.value) }} onClick={e => e.stopPropagation()} style={{ fontSize:11, fontWeight:500, padding:'2px 7px', borderRadius:99, border:'none', cursor:'pointer', background:sc.bg||'#f3f4f6', color:sc.tx||'#374151', outline:'none' }}>
+                                <select value={l.status} onChange={e => { e.stopPropagation(); setPendingLeadUpdate({ id: l.id, target: e.target.value }) }} onClick={e => e.stopPropagation()} style={{ fontSize:11, fontWeight:500, padding:'2px 7px', borderRadius:99, border:'none', cursor:'pointer', background:sc.bg||'#f3f4f6', color:sc.tx||'#374151', outline:'none' }}>
                                   {LEAD_STATUSES.map(s => <option key={s}>{s}</option>)}
                                 </select>
                               </td>
@@ -676,14 +600,8 @@ export default function Sales({ user }) {
                               <tr key={l.id+'x'} style={{ background:'var(--surface-2)', borderTop:'1px solid var(--border)' }}>
                                 <td colSpan={7} style={{ padding:'10px 14px' }}>
                                   <div style={{ display:'flex', gap:10, alignItems:'flex-end' }}>
-                                    <Field label="Notes" mb={0} style={{ flex:1 }}>
-                                      <input style={{ ...IS, fontSize:12 }} defaultValue={l.notes || ''} onBlur={e => updateLeadNotes(l.id, e.target.value)} placeholder="Add notes…" onClick={e => e.stopPropagation()} />
-                                    </Field>
-                                    {isAdmin && (
-                                      <button onClick={e => { e.stopPropagation(); setConfirmDelete({ _type:'lead', id:l.id }) }} style={{ fontSize:11, color:'#ef4444', background:'none', border:'1px solid #fca5a5', borderRadius:6, padding:'5px 10px', cursor:'pointer' }}>
-                                        🗑 Delete
-                                      </button>
-                                    )}
+                                    <Field label="Notes" mb={0} style={{ flex:1 }}><input style={{ ...IS, fontSize:12 }} defaultValue={l.notes || ''} onBlur={e => updateLeadNotes(l.id, e.target.value)} placeholder="Add notes…" onClick={e => e.stopPropagation()} /></Field>
+                                    {isAdmin && <button onClick={e => { e.stopPropagation(); setConfirmDelete({ _type:'lead', id:l.id }) }} style={{ fontSize:11, color:'#ef4444', background:'none', border:'1px solid #fca5a5', borderRadius:6, padding:'5px 10px', cursor:'pointer' }}>🗑 Delete</button>}
                                   </div>
                                 </td>
                               </tr>
@@ -695,20 +613,15 @@ export default function Sales({ user }) {
                   )}
                 </Card>
               </div>
-
-              {/* Lead sidebar stats */}
               <div>
                 <Card mb={10}>
                   <div style={{ fontSize:12, fontWeight:500, color:'var(--text-1)', marginBottom:10 }}>By status</div>
-                  {LEAD_STATUSES.map(s => {
-                    const sc = LEAD_STATUS_COLORS[s]
-                    return (
-                      <div key={s} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'4px 0', borderBottom:'1px solid var(--border)' }}>
-                        <span style={{ fontSize:11, padding:'1px 6px', borderRadius:99, background:sc?.bg, color:sc?.tx, fontWeight:500 }}>{s}</span>
-                        <span style={{ fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{leadCounts[s]||0}</span>
-                      </div>
-                    )
-                  })}
+                  {LEAD_STATUSES.map(s => (
+                    <div key={s} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'4px 0', borderBottom:'1px solid var(--border)' }}>
+                      <span style={{ fontSize:11, padding:'1px 6px', borderRadius:99, background:LEAD_STATUS_COLORS[s]?.bg, color:LEAD_STATUS_COLORS[s]?.tx, fontWeight:500 }}>{s}</span>
+                      <span style={{ fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{leadCounts[s]||0}</span>
+                    </div>
+                  ))}
                 </Card>
                 <Card>
                   <div style={{ fontSize:12, fontWeight:500, color:'var(--text-1)', marginBottom:10 }}>By source</div>
@@ -724,34 +637,22 @@ export default function Sales({ user }) {
           </div>
         )}
 
-        {/* ── GOALS (admin only) ── */}
+        {/* ── TAB 5: GOALS ── */}
         {tab === 'Goals' && isAdmin && (
           <div>
-            <div style={{ fontSize:12, color:'var(--text-3)', marginBottom:14 }}>
-              Set monthly and weekly targets for each agent. Click an agent row to edit.
-            </div>
+            <div style={{ fontSize:12, color:'var(--text-3)', marginBottom:14 }}>Set monthly and weekly targets for each agent. Click an agent row to edit.</div>
             <Card p={0}>
               <table style={{ width:'100%', borderCollapse:'collapse' }}>
                 <thead>
                   <tr style={{ background:'var(--surface-2)' }}>
-                    {['Agent','Mo. Items','Mo. Premium','Mo. Quotes','Wk. Items','Wk. Premium','Wk. Quotes',''].map(h => (
-                      <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>
-                    ))}
+                    {['Agent','Mo. Items','Mo. Premium','Mo. Quotes','Wk. Items','Wk. Premium','Wk. Quotes',''].map(h => <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:500, color:'var(--text-4)', textTransform:'uppercase', letterSpacing:.4 }}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {members.map(m => {
-                    const g     = goals[m.id] || { policies:8, premium:10000, quotes:30, weekly_policies:2, weekly_premium:2500, weekly_quotes:8 }
-                    const ms    = sales.filter(s => s.uid === m.id)
-                    const ma    = acts.filter(a => a.uid === m.id)
-                    const wSales = weekSales.filter(s => s.uid === m.id)
-                    const wActs  = weekActs.filter(a => a.uid === m.id)
-                    const mI  = ms.reduce((s, x) => s + (x.items||1), 0)
-                    const mP  = ms.reduce((s, x) => s + (x.premium||0), 0)
-                    const mQ  = Math.max(0, ma.filter(a => a.type==='Quote').reduce((s, a) => s + a.count, 0))
-                    const wI  = wSales.reduce((s, x) => s + (x.items||1), 0)
-                    const wP  = wSales.reduce((s, x) => s + (x.premium||0), 0)
-                    const wQ  = Math.max(0, wActs.filter(a => a.type==='Quote').reduce((s, a) => s + a.count, 0))
+                    const g = goals[m.id] || { policies:8, premium:10000, quotes:30, weekly_policies:2, weekly_premium:2500, weekly_quotes:8 }; const ms = sales.filter(s => s.uid === m.id); const ma = acts.filter(a => a.uid === m.id); const wSales = weekSales.filter(s => s.uid === m.id); const wActs = weekActs.filter(a => a.uid === m.id)
+                    const mI = ms.reduce((s, x) => s + (x.items||1), 0); const mP = ms.reduce((s, x) => s + (x.premium||0), 0); const mQ = Math.max(0, ma.filter(a => a.type==='Quote').reduce((s, a) => s + a.count, 0))
+                    const wI = wSales.reduce((s, x) => s + (x.items||1), 0); const wP = wSales.reduce((s, x) => s + (x.premium||0), 0); const wQ = Math.max(0, wActs.filter(a => a.type==='Quote').reduce((s, a) => s + a.count, 0))
                     return (
                       <tr key={m.id} style={{ borderTop:'1px solid var(--border)' }}>
                         <td style={{ padding:'9px 12px', fontSize:12, fontWeight:500, color:'var(--text-1)' }}>{m.name}</td>
@@ -761,9 +662,7 @@ export default function Sales({ user }) {
                         <td style={{ padding:'9px 12px', fontSize:11, color:pcol(wI, g.weekly_policies||2) }}>{wI}/{g.weekly_policies||2}</td>
                         <td style={{ padding:'9px 12px', fontSize:11, color:pcol(wP, g.weekly_premium||2500) }}>${wP.toLocaleString()}/{(g.weekly_premium||2500).toLocaleString()}</td>
                         <td style={{ padding:'9px 12px', fontSize:11, color:pcol(wQ, g.weekly_quotes||8) }}>{wQ}/{g.weekly_quotes||8}</td>
-                        <td style={{ padding:'9px 12px' }}>
-                          <button onClick={() => startEditGoal(m.id)} style={{ fontSize:11, color:N, background:'var(--primary-light)', border:`1px solid var(--primary-mid)`, borderRadius:6, padding:'3px 10px', cursor:'pointer' }}>Edit</button>
-                        </td>
+                        <td style={{ padding:'9px 12px' }}><button onClick={() => startEditGoal(m.id)} style={{ fontSize:11, color:N, background:'var(--primary-light)', border:`1px solid var(--primary-mid)`, borderRadius:6, padding:'3px 10px', cursor:'pointer' }}>Edit</button></td>
                       </tr>
                     )
                   })}
@@ -774,70 +673,41 @@ export default function Sales({ user }) {
         )}
       </div>
 
-      {/* Edit sale modal */}
+      {/* MODALS & PORTALS */}
       {editingSale && (
         <Modal title="Edit sale" onClose={() => setEditingSale(null)}>
           <Field label="Client name *"><input style={IS} value={editSaleForm.client} onChange={e => setEditSaleForm(f => ({ ...f, client:e.target.value }))} /></Field>
-          <Field label="Item type">
-            <select style={IS} value={editSaleForm.pt} onChange={e => setEditSaleForm(f => ({ ...f, pt:e.target.value }))}>
-              {ITEM_TYPES.map(o => <option key={o}>{o}</option>)}
-            </select>
-          </Field>
+          <Field label="Item type"><select style={IS} value={editSaleForm.pt} onChange={e => setEditSaleForm(f => ({ ...f, pt:e.target.value }))}>{ITEM_TYPES.map(o => <option key={o}>{o}</option>)}</select></Field>
           <Field label="Premium ($)"><input style={IS} type="number" value={editSaleForm.premium} onChange={e => setEditSaleForm(f => ({ ...f, premium:e.target.value }))} /></Field>
           <Field label="Item count"><input style={IS} type="number" min="1" value={editSaleForm.items} onChange={e => setEditSaleForm(f => ({ ...f, items:e.target.value }))} /></Field>
-          <div style={{ background:'var(--warning-light)', border:'1px solid #fcd34d', borderRadius:7, padding:'8px 12px', fontSize:11, color:'#92400e', marginBottom:14 }}>
-            Editing a sale will be recorded in the audit log.
-          </div>
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-            <Btn variant="outline" onClick={() => setEditingSale(null)}>Cancel</Btn>
-            <Btn onClick={saveEditSale} disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</Btn>
-          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}><Btn variant="outline" onClick={() => setEditingSale(null)}>Cancel</Btn><Btn onClick={saveEditSale} disabled={savingEdit}>{savingEdit ? 'Saving…' : 'Save changes'}</Btn></div>
         </Modal>
       )}
 
-      {/* Edit goal modal */}
       {editGoal && (
         <Modal title={`Edit goals — ${profiles.find(p => p.id === editGoal)?.name}`} onClose={() => setEditGoal(null)}>
-          <div style={{ fontSize:12, fontWeight:500, color:'var(--text-2)', marginBottom:10, padding:'6px 10px', background:'var(--surface-2)', borderRadius:6 }}>Monthly targets</div>
           <Field label="Items sold"><input style={IS} type="number" value={gForm.monthly_items} onChange={e => setGForm(f => ({ ...f, monthly_items:e.target.value }))} /></Field>
           <Field label="Premium ($)"><input style={IS} type="number" value={gForm.monthly_premium} onChange={e => setGForm(f => ({ ...f, monthly_premium:e.target.value }))} /></Field>
           <Field label="Quotes"><input style={IS} type="number" value={gForm.monthly_quotes} onChange={e => setGForm(f => ({ ...f, monthly_quotes:e.target.value }))} /></Field>
-          <div style={{ fontSize:12, fontWeight:500, color:'var(--text-2)', margin:'12px 0 10px', padding:'6px 10px', background:'var(--surface-2)', borderRadius:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            Weekly targets
-            <button onClick={autoFillWeekly} style={{ fontSize:11, color:N, background:'none', border:`1px solid ${N}`, borderRadius:5, padding:'2px 9px', cursor:'pointer' }}>÷4 Auto-fill</button>
-          </div>
-          <Field label="Items sold"><input style={IS} type="number" value={gForm.weekly_items} onChange={e => setGForm(f => ({ ...f, weekly_items:e.target.value }))} /></Field>
-          <Field label="Premium ($)"><input style={IS} type="number" value={gForm.weekly_premium} onChange={e => setGForm(f => ({ ...f, weekly_premium:e.target.value }))} /></Field>
-          <Field label="Quotes"><input style={IS} type="number" value={gForm.weekly_quotes} onChange={e => setGForm(f => ({ ...f, weekly_quotes:e.target.value }))} /></Field>
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
-            <Btn variant="outline" onClick={() => setEditGoal(null)}>Cancel</Btn>
-            <Btn onClick={saveGoal}>Save goals</Btn>
-          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}><Btn variant="outline" onClick={() => setEditGoal(null)}>Cancel</Btn><Btn onClick={saveGoal}>Save goals</Btn></div>
         </Modal>
       )}
 
-      {/* Confirm delete sale */}
-      {confirmDelete && !confirmDelete._type && (
+      {pendingLeadUpdate && (
         <ConfirmModal
-          title="Delete this sale?"
-          message={`This will permanently remove the sale for ${confirmDelete.client} ($${Number(confirmDelete.premium).toLocaleString()}).`}
-          confirmLabel="Delete"
-          danger
-          onConfirm={() => deleteSale(confirmDelete)}
-          onCancel={() => setConfirmDelete(null)}
+          title="Verify Pipeline Shift?"
+          message={`Are you sure you want to transition this lead return record status over to "${pendingLeadUpdate.target}"?`}
+          onConfirm={() => executeLeadStatusUpdate(pendingLeadUpdate.id, pendingLeadUpdate.target)}
+          onCancel={() => setPendingLeadUpdate(null)}
         />
       )}
 
-      {/* Confirm delete lead */}
+      {confirmDelete && !confirmDelete._type && (
+        <ConfirmModal title="Delete this sale?" message={`This will permanently remove the sale for ${confirmDelete.client}.`} confirmLabel="Delete" danger onConfirm={() => deleteSale(confirmDelete)} onCancel={() => setConfirmDelete(null)} />
+      )}
+
       {confirmDelete?._type === 'lead' && (
-        <ConfirmModal
-          title="Delete this lead return?"
-          message="This will permanently remove the lead return record."
-          confirmLabel="Delete"
-          danger
-          onConfirm={() => confirmLeadDelete(confirmDelete.id)}
-          onCancel={() => setConfirmDelete(null)}
-        />
+        <ConfirmModal title="Delete this lead return?" message="This will permanently remove the lead return record." confirmLabel="Delete" danger onConfirm={() => confirmLeadDelete(confirmDelete.id)} onCancel={() => setConfirmDelete(null)} />
       )}
 
       {saleToast && <SaleToast sale={saleToast} onDone={() => setSaleToast(null)} />}
