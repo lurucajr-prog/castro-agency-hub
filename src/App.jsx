@@ -19,7 +19,7 @@ import Cancellations         from './components/Cancellations'
 import Renewals              from './components/Renewals'
 import Learning              from './components/Learning'
 import Chat                  from './components/Chat'
-import LeadReturns from './components/LeadReturns'
+import LeadReturns           from './components/LeadReturns'
 import DirectMessages        from './components/DirectMessages'
 import Profiles              from './components/Profiles'
 import Suggestions           from './components/Suggestions'
@@ -29,23 +29,23 @@ import NotificationHistory   from './components/NotificationHistory'
 import { Spinner }           from './components/shared'
 
 const PAGES = {
-  dashboard:                Dashboard,
-  tasks:                    Tasks,
-  referrals:                Referrals,
-  reviews:                  Reviews,
-  sales:                    Sales,
-  'lead-returns': LeadReturns,
-  'live-leads':             LiveLeads,
-  cancellations:            Cancellations,
-  renewals:                 Renewals,
-  learning:                 Learning,
-  profiles:                 Profiles,
-  suggestions:              Suggestions,
-  settings:                 AdminSettings,
-  'audit-log':              AuditLog,
-  'notification-history':   NotificationHistory,
-  chat:                     Chat,
-  dms:                      DirectMessages
+  dashboard:              Dashboard,
+  tasks:                  Tasks,
+  referrals:              Referrals,
+  reviews:                Reviews,
+  sales:                  Sales,
+  'lead-returns':         LeadReturns,
+  'live-leads':           LiveLeads,
+  cancellations:          Cancellations,
+  renewals:               Renewals,
+  learning:               Learning,
+  profiles:               Profiles,
+  suggestions:            Suggestions,
+  settings:               AdminSettings,
+  'audit-log':            AuditLog,
+  'notification-history': NotificationHistory,
+  chat:                   Chat,
+  dms:                    DirectMessages,
 }
 
 export default function App() {
@@ -55,7 +55,8 @@ export default function App() {
   const [loading,      setLoading]      = useState(true)
   const [darkMode,     setDarkMode]     = useState(false)
   const [dmTarget,     setDmTarget]     = useState(null)
-  
+  const [chatChannel,  setChatChannel]  = useState(null)
+
   // Tracks active in-memory user profile to prevent background tab focus flashes
   const activeProfileRef = useRef(null)
   const [visitedPages, setVisitedPages] = useState(new Set(['dashboard']))
@@ -92,11 +93,11 @@ export default function App() {
 
       if (data) {
         setProfile(data)
-        activeProfileRef.current = data // Sync to reference tracker
+        activeProfileRef.current = data
         setDarkMode(data.dark_mode === true)
       }
     } catch (err) {
-      console.error("Profile compilation crash caught:", err)
+      console.error('Profile compilation crash caught:', err)
     } finally {
       setLoading(false)
     }
@@ -105,7 +106,6 @@ export default function App() {
   useEffect(() => {
     let isMounted = true
 
-    // Step 1: Query for an existing local browser session immediately on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return
       if (session) {
@@ -114,19 +114,18 @@ export default function App() {
       } else {
         setLoading(false)
       }
-    }).catch(err => {
+    }).catch(() => {
       if (isMounted) setLoading(false)
     })
 
-    // Step 2: Establish background listener for subsequent sign-in/sign-out events
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
       if (!isMounted) return
-      
+
       if (event === 'SIGNED_IN') {
         setSession(currentSession)
         if (currentSession?.user?.email) {
-          // FIX: Only trigger full-screen loading state if there isn't an active profile in memory.
-          // This permanently kills the split-second flash when switching Chrome browser tabs!
+          // Only trigger full-screen loading if there isn't an active profile in memory.
+          // This kills the split-second flash when switching Chrome browser tabs.
           if (!activeProfileRef.current) {
             setLoading(true)
           }
@@ -135,7 +134,7 @@ export default function App() {
       } else if (event === 'SIGNED_OUT') {
         setSession(null)
         setProfile(null)
-        activeProfileRef.current = null // Clear memory tracker
+        activeProfileRef.current = null
         setDarkMode(false)
         setLoading(false)
       }
@@ -164,6 +163,7 @@ export default function App() {
     setPage('dashboard')
     setDarkMode(false)
     setDmTarget(null)
+    setChatChannel(null)
     setVisitedPages(new Set(['dashboard']))
     setLoading(false)
   }
@@ -176,10 +176,10 @@ export default function App() {
   // ── Render Track 1: Loading ──
   if (loading) {
     return (
-      <div style={{ minHeight:'100vh', background:'#1B3A6B', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:20, padding:24, fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-        <div style={{ color:'#fff', fontSize:22, fontWeight:600, letterSpacing:-0.5 }}>Castro Agency Hub</div>
+      <div style={{ minHeight: '100vh', background: '#1B3A6B', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 20, padding: 24, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+        <div style={{ color: '#fff', fontSize: 22, fontWeight: 600, letterSpacing: -0.5 }}>Castro Agency Hub</div>
         <Spinner />
-        <div style={{ color:'rgba(255,255,255,0.6)', fontSize:13 }}>{debugStatus}</div>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>{debugStatus}</div>
       </div>
     )
   }
@@ -187,14 +187,14 @@ export default function App() {
   // ── Render Track 2: Safe Account Recovery ──
   if (session && !profile) {
     return (
-      <div style={{ minHeight:'100vh', background:'#1B3A6B', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:20, padding:24, fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-        <div style={{ background:'#fff', color:'#111', padding:32, borderRadius:14, maxWidth:450, width:'100%', textAlign:'center', boxShadow:'0 20px 40px rgba(0,0,0,0.3)' }}>
-          <div style={{ fontSize:36, marginBottom:10 }}>⚠️</div>
-          <div style={{ fontSize:18, fontWeight:700, marginBottom:8, color:'#111' }}>Staff Profile Unresolved</div>
-          <div style={{ fontSize:13, color:'#4b5563', lineHeight:1.6, marginBottom:22, textAlign:'left' }}>
-            You have authenticated successfully as <strong>{session.user.email}</strong>, but this email address has not been added to your database's <code>profiles</code> table yet. 
+      <div style={{ minHeight: '100vh', background: '#1B3A6B', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 20, padding: 24, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+        <div style={{ background: '#fff', color: '#111', padding: 32, borderRadius: 14, maxWidth: 450, width: '100%', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.3)' }}>
+          <div style={{ fontSize: 36, marginBottom: 10 }}>⚠️</div>
+          <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: '#111' }}>Staff Profile Unresolved</div>
+          <div style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.6, marginBottom: 22, textAlign: 'left' }}>
+            You have authenticated successfully as <strong>{session.user.email}</strong>, but this email address has not been added to your database's <code>profiles</code> table yet.
           </div>
-          <button onClick={handleLogout} style={{ background:'#c8102e', color:'#fff', border:'none', borderRadius:9, padding:'12px 20px', fontSize:14, fontWeight:700, cursor:'pointer', width:'100%', boxShadow:'0 4px 12px rgba(200,16,46,0.25)' }}>
+          <button onClick={handleLogout} style={{ background: '#c8102e', color: '#fff', border: 'none', borderRadius: 9, padding: '12px 20px', fontSize: 14, fontWeight: 700, cursor: 'pointer', width: '100%', boxShadow: '0 4px 12px rgba(200,16,46,0.25)' }}>
             Return to Sign In
           </button>
         </div>
@@ -202,17 +202,31 @@ export default function App() {
     )
   }
 
-  // ── Render Track 3: Standard Form Routing ──
+  // ── Render Track 3: Standard App Routing ──
   if (!session || !profile) return <Login />
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif", background: 'var(--bg)' }}>
-      <Sidebar user={profile} page={page} setPage={setPage} onLogout={handleLogout} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      <Sidebar
+        user={profile}
+        page={page}
+        setPage={setPage}
+        onLogout={handleLogout}
+        darkMode={darkMode}
+        toggleDarkMode={toggleDarkMode}
+      />
 
-      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', minWidth:0 }}>
-        <TopBar user={profile} page={page} setPage={setPage} darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        <TopBar
+          user={profile}
+          page={page}
+          setPage={setPage}
+          darkMode={darkMode}
+          toggleDarkMode={toggleDarkMode}
+          onChatNavTarget={setChatChannel}
+        />
 
-        <div style={{ flex:1, overflow:'hidden', position:'relative' }}>
+        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
           {Object.entries(PAGES).map(([pageKey, PageComponent]) => {
             if (!visitedPages.has(pageKey)) return null
             const isCurrentActiveRoute = page === pageKey
@@ -222,9 +236,26 @@ export default function App() {
                 <ErrorBoundary>
                   <div className="page-enter" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     {pageKey === 'dms' ? (
-                      <DirectMessages user={profile} dmTarget={dmTarget} onDmTargetConsumed={() => setDmTarget(null)} />
+                      <DirectMessages
+                        user={profile}
+                        dmTarget={dmTarget}
+                        onDmTargetConsumed={() => setDmTarget(null)}
+                      />
+                    ) : pageKey === 'chat' ? (
+                      <Chat
+                        user={profile}
+                        setPage={setPage}
+                        darkMode={darkMode}
+                        chatChannel={chatChannel}
+                        onChatChannelConsumed={() => setChatChannel(null)}
+                      />
                     ) : (
-                      <PageComponent user={profile} setPage={setPage} darkMode={darkMode} openDm={openDm} />
+                      <PageComponent
+                        user={profile}
+                        setPage={setPage}
+                        darkMode={darkMode}
+                        openDm={openDm}
+                      />
                     )}
                   </div>
                 </ErrorBoundary>
