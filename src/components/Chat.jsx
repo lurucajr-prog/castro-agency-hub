@@ -176,7 +176,7 @@ export default function Chat({ user }) {
 
     const { error } = await supabase.from('messages').insert({
       uid: user.id,
-      text: payloadText || null,
+      text: payloadText || '',
       image_url: imageUrl || null,
       channel
     })

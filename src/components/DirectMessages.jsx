@@ -167,7 +167,7 @@ export default function DirectMessages({ user, setPage, darkMode, dmTarget, onDm
     await supabase.from('direct_messages').insert({
       from_uid:  user.id,
       to_uid:    selected.id,
-      text:      trimmed || null,
+      text:      trimmed || '',
       image_url: imageUrl || null,
       read:      false,
     })
@@ -187,7 +187,7 @@ export default function DirectMessages({ user, setPage, darkMode, dmTarget, onDm
     await supabase.from('direct_messages').insert({
       from_uid:  user.id,
       to_uid:    selected.id,
-      text:      null,
+      text: '',
       image_url: gifUrl,
       read:      false,
     })
