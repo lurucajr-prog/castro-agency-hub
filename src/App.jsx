@@ -1,5 +1,5 @@
 // ============================================================
-// Castro Agency Hub — App Entry (Auto-Diagnostic & Self-Healing Shell)
+// Castro Agency Hub — App Entry (Concurrence-Safe Production Shell)
 // Place this file at: src/App.jsx
 // ============================================================
 import './styles/theme.css'
@@ -54,10 +54,7 @@ export default function App() {
   const [darkMode,     setDarkMode]     = useState(false)
   const [dmTarget,     setDmTarget]     = useState(null)
   const [visitedPages, setVisitedPages] = useState(new Set(['dashboard']))
-  
-  // Real-time troubleshooting diagnosis telemetry hooks
-  const [debugStatus,  setDebugStatus]  = useState('Initializing security layer...')
-  const [debugError,   setDebugError]   = useState(null)
+  const [debugStatus,  setDebugStatus]  = useState('Initializing verification trackers...')
 
   // Track visited persistent pages so they stay mounted
   useEffect(() => {
@@ -72,17 +69,14 @@ export default function App() {
     else          document.documentElement.classList.remove('dark')
   }, [darkMode])
 
-  // Securely load profile row with comprehensive diagnostic exception tracking
-  async function loadProfile(emailStr) {
+  // Single consolidated profile loader
+  async function loadProfileData(emailStr) {
     if (!emailStr) {
-      setDebugError('No authenticated email address resolved from your active login.')
       setLoading(false)
       return
     }
-    
     const cleanEmail = emailStr.toLowerCase().trim()
-    setDebugStatus(`Verifying database profile authorization for ${cleanEmail}...`)
-    
+    setDebugStatus(`Verifying role clearance for ${cleanEmail}...`)
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -91,23 +85,17 @@ export default function App() {
         .maybeSingle()
 
       if (error) {
-        console.error("Database connection exception:", error)
-        setDebugError(`Database Error: ${error.message || 'Row retrieval constraint violation.'} (Check your Supabase policies)`)
+        console.error("Profile loading mismatch exception:", error)
+        setDebugStatus(`Database link error: ${error.message}`)
         return
       }
 
-      if (!data) {
-        console.warn(`Account profile lookup miss: ${cleanEmail}`)
-        setDebugError(`Account mismatch: '${cleanEmail}' successfully authenticated with Supabase, but no corresponding staff role entry exists inside your 'profiles' database table. Double-check your user management spellings!`)
-        return
+      if (data) {
+        setProfile(data)
+        setDarkMode(data.dark_mode === true)
       }
-
-      setProfile(data)
-      setDarkMode(data.dark_mode === true)
-      setDebugError(null)
     } catch (err) {
-      console.error("Critical execution catch block:", err)
-      setDebugError(`System Crash: ${err.message || 'An unexpected execution panic occurred.'}`)
+      console.error("Profile compilation crash caught:", err)
     } finally {
       setLoading(false)
     }
@@ -116,42 +104,32 @@ export default function App() {
   useEffect(() => {
     let isMounted = true
 
-    async function initializeAuthSession() {
-      try {
-        setDebugStatus('Scanning for active browser credentials...')
-        const { data: { session }, error } = await supabase.auth.getSession()
-        if (error) throw error
-
-        if (!isMounted) return
-        setSession(session)
-
-        if (session?.user?.email) {
-          await loadProfile(session.user.email)
-        } else {
-          setLoading(false)
-        }
-      } catch (err) {
-        console.error("Auth session tracking initialization failure:", err)
-        if (isMounted) {
-          setDebugError(`Auth Error: ${err.message || 'Failed to successfully negotiate secure handshake with database.'}`)
-          setLoading(false)
-        }
-      }
-    }
-
-    initializeAuthSession()
-
-    // Listen for real-time authentication state disruptions
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+    // Step 1: Query for an existing local browser session immediately on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return
-      setSession(currentSession)
-      
-      if (currentSession?.user?.email) {
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          setLoading(true)
-          await loadProfile(currentSession.user.email)
-        }
+      if (session) {
+        setSession(session)
+        loadProfileData(session.user.email)
       } else {
+        setLoading(false)
+      }
+    }).catch(err => {
+      console.error("Authentication track error:", err)
+      if (isMounted) setLoading(false)
+    })
+
+    // Step 2: Establish a clean background listener for subsequent sign-in/sign-out events
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (!isMounted) return
+      
+      if (event === 'SIGNED_IN') {
+        setSession(currentSession)
+        if (currentSession?.user?.email) {
+          setLoading(true)
+          loadProfileData(currentSession.user.email)
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setSession(null)
         setProfile(null)
         setDarkMode(false)
         setLoading(false)
@@ -173,22 +151,15 @@ export default function App() {
   }
 
   async function handleLogout() {
-    try {
-      setLoading(true)
-      setDebugStatus('De-authenticating cookies and resetting configuration context...')
-      await supabase.auth.signOut()
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setSession(null)
-      setProfile(null)
-      setPage('dashboard')
-      setDarkMode(false)
-      setDmTarget(null)
-      setVisitedPages(new Set(['dashboard']))
-      setDebugError(null)
-      setLoading(false)
-    }
+    setLoading(true)
+    await supabase.auth.signOut()
+    setSession(null)
+    setProfile(null)
+    setPage('dashboard')
+    setDarkMode(false)
+    setDmTarget(null)
+    setVisitedPages(new Set(['dashboard']))
+    setLoading(false)
   }
 
   function openDm(profileId) {
@@ -196,33 +167,38 @@ export default function App() {
     setPage('dms')
   }
 
-  // ── Smart Diagnostic Loader Shell ───────────────────────────
+  // ── Render Track 1: Loading ──
   if (loading) {
     return (
       <div style={{ minHeight:'100vh', background:'#1B3A6B', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:20, padding:24, fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
         <div style={{ color:'#fff', fontSize:22, fontWeight:600, letterSpacing:-0.5 }}>Castro Agency Hub</div>
-        
-        {!debugError ? (
-          <>
-            <Spinner />
-            <div style={{ color:'rgba(255,255,255,0.6)', fontSize:13 }}>{debugStatus}</div>
-          </>
-        ) : (
-          <div style={{ background:'rgba(255,255,255,0.98)', borderRadius:14, padding:28, maxWidth:460, width:'100%', boxShadow:'0 20px 40px rgba(0,0,0,0.4)', textAlign:'center', animation:'page-enter 0.3s ease' }}>
-            <div style={{ fontSize:36, marginBottom:12 }}>⚙️</div>
-            <div style={{ color:'#111', fontSize:18, fontWeight:700, marginBottom:8 }}>Portal Troubleshooting Interface</div>
-            <div style={{ color:'#4b5563', fontSize:13, lineHeight:1.6, marginBottom:22, textAlign:'left', background:'#f3f4f6', padding:14, borderRadius:8, borderLeft:'4px solid #dc2626', wordBreak:'break-word', fontFamily:'monospace' }}>
-              {debugError}
-            </div>
-            <button onClick={handleLogout} style={{ background:'#c8102e', color:'#fff', border:'none', borderRadius:9, padding:'12px 20px', fontSize:14, fontWeight:700, cursor:'pointer', width:'100%', boxShadow:'0 4px 12px rgba(200,16,46,0.3)', transition:'opacity 0.2s' }}>
-              Disconnect & Reset Session
-            </button>
-          </div>
-        )}
+        <Spinner />
+        <div style={{ color:'rgba(255,255,255,0.6)', fontSize:13 }}>{debugStatus}</div>
       </div>
     )
   }
 
+  // ── Render Track 2: Safe Account Recovery (Handles missing database profiles without freezing) ──
+  if (session && !profile) {
+    return (
+      <div style={{ minHeight:'100vh', background:'#1B3A6B', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:20, padding:24, fontFamily:"-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+        <div style={{ background:'#fff', color:'#111', padding:32, borderRadius:14, maxWidth:450, width:'100%', textAlign:'center', boxShadow:'0 20px 40px rgba(0,0,0,0.3)' }}>
+          <div style={{ fontSize:36, marginBottom:10 }}>⚠️</div>
+          <div style={{ fontSize:18, fontWeight:700, marginBottom:8, color:'#111' }}>Staff Profile Unresolved</div>
+          <div style={{ fontSize:13, color:'#4b5563', lineHeight:1.6, marginBottom:22, textAlign:'left' }}>
+            You have authenticated successfully as <strong>{session.user.email}</strong>, but this email address has not been added to your database's <code>profiles</code> table yet. 
+            <br /><br />
+            An administrator needs to register this exact email address in the database so the interface can map your tracking targets.
+          </div>
+          <button onClick={handleLogout} style={{ background:'#c8102e', color:'#fff', border:'none', borderRadius:9, padding:'12px 20px', fontSize:14, fontWeight:700, cursor:'pointer', width:'100%', boxShadow:'0 4px 12px rgba(200,16,46,0.25)' }}>
+            Return to Sign In
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Render Track 3: Standard Form Routing ──
   if (!session || !profile) return <Login />
 
   const PageComponent  = PAGES[page]
@@ -257,8 +233,7 @@ export default function App() {
         />
 
         <div style={{ flex:1, overflow:'hidden', position:'relative' }}>
-
-          {/* ── Persistent pages ── */}
+          {/* Chat Panel */}
           {visitedPages.has('chat') && (
             <div style={{ display: page === 'chat' ? 'flex' : 'none', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
               <ErrorBoundary>
@@ -267,7 +242,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Direct Messages */}
+          {/* DM Panel */}
           {visitedPages.has('dms') && (
             <div style={{ display: page === 'dms' ? 'flex' : 'none', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
               <ErrorBoundary>
@@ -282,7 +257,7 @@ export default function App() {
             </div>
           )}
 
-          {/* ── Regular pages ── */}
+          {/* Standard Page Panels */}
           {!isPersistent && PageComponent && (
             <div style={{ height:'100%', overflow:'auto', background:'var(--bg)' }}>
               <ErrorBoundary key={page}>
