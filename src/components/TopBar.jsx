@@ -13,6 +13,7 @@ const PAGE_LABELS = {
   referrals:              'Referrals',
   reviews:                'Reviews',
   sales:                  'Sales',
+  'lead-returns':         'Lead Returns',
   'live-leads':           'Live Lead Recap',
   cancellations:          'Cancellations',
   renewals:               'Renewals',
@@ -33,6 +34,7 @@ const TYPE_ICON = {
   sale:         '🎯',
   dm:           '✉️',
   task:         '☑️',
+  chat_alert:   '💬',
 }
 
 const TYPE_COLOR = {
@@ -41,9 +43,10 @@ const TYPE_COLOR = {
   sale:         '#16a34a',
   dm:           '#8b5cf6',
   task:         '#d97706',
+  chat_alert:   '#3b82f6',
 }
 
-export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }) {
+export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode, onChatNavTarget }) {
   const [notifications, setNotifications] = useState([])
   const [dmUnread,      setDmUnread]      = useState(0)
   const [panelOpen,     setPanelOpen]     = useState(false)
@@ -115,7 +118,13 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
     await supabase.from('notifications').update({ read: true }).eq('id', notif.id)
     setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, read: true } : n))
     setPanelOpen(false)
-    if (notif.nav_target) setPage(notif.nav_target)
+    if (notif.nav_target) {
+      setPage(notif.nav_target)
+      // If it's a chat notification with a specific channel, switch directly to that channel
+      if (notif.nav_target === 'chat' && notif.nav_channel) {
+        onChatNavTarget?.(notif.nav_channel)
+      }
+    }
   }
 
   function formatTime(ts) {
@@ -138,12 +147,15 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 20px', flexShrink: 0, transition: 'background 0.25s',
       }}>
+        {/* Page label */}
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-1)' }}>
           {PAGE_LABELS[page] || 'Castro Agency Hub'}
         </div>
 
+        {/* Right controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Savings calc */}
+
+          {/* Savings calculator */}
           <button
             onClick={() => setShowCalc(true)}
             title="Quick Savings Calculator"
@@ -154,7 +166,7 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
             💰 Savings calc
           </button>
 
-          {/* Dark mode */}
+          {/* Dark mode toggle */}
           <button
             onClick={toggleDarkMode}
             style={{ width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, transition: 'background 0.15s', color: 'var(--text-2)' }}
@@ -164,7 +176,7 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
             {darkMode ? '☀️' : '🌙'}
           </button>
 
-          {/* Bell */}
+          {/* Notification bell */}
           <div ref={panelRef} style={{ position: 'relative' }}>
             <button
               onClick={() => setPanelOpen(o => !o)}
@@ -182,7 +194,7 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
             {panelOpen && (
               <div style={{ position: 'absolute', top: '110%', right: 0, width: 340, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow-lg)', zIndex: 500, overflow: 'hidden' }}>
 
-                {/* Header */}
+                {/* Panel header */}
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>Notifications</span>
@@ -202,7 +214,7 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
                   )}
                 </div>
 
-                {/* Push permission */}
+                {/* Push notification permission nudge */}
                 {'Notification' in window && Notification.permission !== 'granted' && (
                   <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border)', background: 'var(--primary-light)' }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)', marginBottom: 3 }}>🔔 Get alerts when you're away</div>
@@ -214,7 +226,7 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
                   </div>
                 )}
 
-                {/* DM row */}
+                {/* DM unread row */}
                 {dmUnread > 0 && (
                   <div
                     onClick={() => { setPage('dms'); setPanelOpen(false); setDmUnread(0) }}
@@ -234,7 +246,7 @@ export default function TopBar({ user, page, setPage, darkMode, toggleDarkMode }
                 {/* Notifications list */}
                 <div style={{ maxHeight: 340, overflowY: 'auto' }}>
                   {notifications.length === 0 && dmUnread === 0 && (
-                    <div style={{ padding: 28, textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>You're all caught up!</div>
+                    <div style={{ padding: 28, textAlign: 'center', color: 'var(--text-4)', fontSize: 13 }}>You're all caught up! 🎉</div>
                   )}
                   {notifications.map(n => (
                     <div
