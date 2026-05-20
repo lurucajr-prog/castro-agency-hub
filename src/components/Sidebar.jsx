@@ -19,6 +19,7 @@ const NAV_GROUPS = [
     label: 'SALES',
     items: [
       { id: 'sales',      label: 'Sales',           icon: '$' },
+      { id: 'lead-returns',  label: 'Lead Returns',     icon: '↩' },
       { id: 'referrals',  label: 'Referrals',       icon: '↗' },
       { id: 'live-leads', label: 'Live Lead Recap', icon: '⚡', restricted: true },
     ],
