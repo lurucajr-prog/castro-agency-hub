@@ -4,8 +4,7 @@
 // ============================================================
 import { useState, useEffect, useRef } from 'react'
 import { supabase }      from '../lib/supabase'
-import { N, R, Spinner, ConfirmModal } from './shared'
-
+import { N, R, Spinner, ConfirmModal, Btn } from './shared'
 const GIPHY_KEY = 'hVI3D0LSXkqeSmspoXlBxQjC7pl27yLJ'
 
 export default function DirectMessages({ user, dmTarget, onDmTargetConsumed }) {
