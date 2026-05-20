@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { N, Card, Btn, Spinner, EmptyState, IS } from './shared'
-import * as XLSX from 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm'
+import * as XLSX from 'xlsx'
 
 const STATUSES = ['Not Started', 'Called', 'Left VM', 'Reached', 'Renewed', 'Lost']
 const STATUS_COLORS = {
@@ -47,7 +47,6 @@ export default function Renewals({ user }) {
       const ws = wb.Sheets[wb.SheetNames[0]]
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1 })
 
-      // Find actual header row — look for common renewal columns
       let headerRowIdx = -1
       const keywords = ['First Name', 'Last Name', 'Insured', 'Renewal', 'Policy', 'Expir']
       for (let i = 0; i < raw.length; i++) {
@@ -66,10 +65,8 @@ export default function Renewals({ user }) {
 
       const headers = raw[headerRowIdx]
       const dataRows = raw.slice(headerRowIdx + 1).filter(row => row.some(v => v))
-
       const col = (name) => headers.findIndex(h => typeof h === 'string' && h.toLowerCase().includes(name.toLowerCase()))
 
-      // Try common column name variants
       const iFirst = col('First Name') !== -1 ? col('First Name') : col('Insured First')
       const iLast = col('Last Name') !== -1 ? col('Last Name') : col('Insured Last')
       const iAddr = col('Address') !== -1 ? col('Address') : col('Street')
@@ -164,25 +161,18 @@ export default function Renewals({ user }) {
         </div>
       </div>
 
-      {/* Filter pills */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {[{ label: 'All', val: records.length }, ...STATUSES.map(s => ({ label: s, val: counts[s] }))].map(({ label, val }) => {
           const active = filter === label
           const sc = STATUS_COLORS[label]
           return (
-            <button key={label} onClick={() => setFilter(label)} style={{
-              padding: '4px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 500,
-              background: active ? (sc?.bg || N) : '#f3f4f6',
-              color: active ? (sc?.tx || '#fff') : '#6b7280',
-            }}>{label} ({val ?? records.length})</button>
+            <button key={label} onClick={() => setFilter(label)} style={{ padding: '4px 12px', borderRadius: 99, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 500, background: active ? (sc?.bg || N) : '#f3f4f6', color: active ? (sc?.tx || '#fff') : '#6b7280' }}>{label} ({val ?? records.length})</button>
           )
         })}
       </div>
 
       <Card p={0}>
-        {filtered.length === 0
-          ? <EmptyState text={records.length === 0 ? 'No records yet. Import your renewal list above.' : 'No records match this filter.'} />
-          : (
+        {filtered.length === 0 ? <EmptyState text={records.length === 0 ? 'No records yet. Import your renewal list above.' : 'No records match this filter.'} /> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: '#f9fafb' }}>
@@ -218,12 +208,7 @@ export default function Renewals({ user }) {
                                 {STATUSES.map(s => {
                                   const c = STATUS_COLORS[s]
                                   return (
-                                    <button key={s} onClick={() => updateStatus(r.id, s)} style={{
-                                      padding: '3px 9px', borderRadius: 99, cursor: 'pointer', fontSize: 11, fontWeight: 500,
-                                      border: `1px solid ${r.status === s ? c.tx : '#e5e7eb'}`,
-                                      background: r.status === s ? c.bg : '#fff',
-                                      color: r.status === s ? c.tx : '#6b7280',
-                                    }}>{s}</button>
+                                    <button key={s} onClick={() => updateStatus(r.id, s)} style={{ padding: '3px 9px', borderRadius: 99, cursor: 'pointer', fontSize: 11, fontWeight: 500, border: `1px solid ${r.status === s ? c.tx : '#e5e7eb'}`, background: r.status === s ? c.bg : '#fff', color: r.status === s ? c.tx : '#6b7280' }}>{s}</button>
                                   )
                                 })}
                               </div>
@@ -240,11 +225,7 @@ export default function Renewals({ user }) {
                               <input defaultValue={r.notes || ''} onBlur={e => updateNotes(r.id, e.target.value)} placeholder="Add notes…" style={{ ...IS, fontSize: 12 }} />
                             </div>
                           </div>
-                          {r.address && (
-                            <div style={{ marginTop: 8, fontSize: 11, color: '#9ca3af' }}>
-                              📍 {r.address}, {r.city}, {r.state} {r.zip}
-                            </div>
-                          )}
+                          {r.address && <div style={{ marginTop: 8, fontSize: 11, color: '#9ca3af' }}>📍 {r.address}, {r.city}, {r.state} {r.zip}</div>}
                         </td>
                       </tr>
                     )
