@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { N, Card, Btn, Spinner, EmptyState, IS } from './shared'
-// XLSX is loaded dynamically inside handleImport to avoid CSP eval() violations
 
 const STATUSES = ['Not Started', 'Called', 'Left VM', 'Reached', 'Saved', 'Lost']
 const STATUS_COLORS = {
@@ -55,7 +54,7 @@ export default function Cancellations({ user }) {
     if (!file) return
     setImporting(true)
     try {
-      const XLSX = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm')
+      const XLSX = await import('xlsx')
       const buffer = await file.arrayBuffer()
       const wb = XLSX.read(buffer, { type: 'array' })
       const ws = wb.Sheets[wb.SheetNames[0]]
@@ -150,7 +149,6 @@ export default function Cancellations({ user }) {
         </div>
       </div>
 
-      {/* Filter pills */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
         {[{ label: 'All', val: records.length }, ...STATUSES.map(s => ({ label: s, val: counts[s] }))].map(({ label, val }) => {
           const active = filter === label
@@ -164,9 +162,7 @@ export default function Cancellations({ user }) {
       </div>
 
       <Card p={0}>
-        {filtered.length === 0
-          ? <EmptyState text={records.length === 0 ? 'No records yet. Import your cancellation list above.' : 'No records match this filter.'} />
-          : (
+        {filtered.length === 0 ? <EmptyState text={records.length === 0 ? 'No records yet. Import your cancellation list above.' : 'No records match this filter.'} /> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ background: 'var(--surface-2)' }}>
@@ -206,78 +202,43 @@ export default function Cancellations({ user }) {
                       <tr key={r.id + '-exp'} style={{ background: 'var(--surface-2)' }}>
                         <td colSpan={7} style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-
-                            {/* Status */}
                             <div>
                               <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>Status</div>
-                              <select
-                                value={r.status}
-                                onChange={e => updateStatus(r.id, e.target.value)}
-                                style={{ ...IS, fontSize: 12 }}
-                              >
+                              <select value={r.status} onChange={e => updateStatus(r.id, e.target.value)} style={{ ...IS, fontSize: 12 }}>
                                 {STATUSES.map(s => <option key={s}>{s}</option>)}
                               </select>
                             </div>
-
-                            {/* Assign to */}
                             <div>
                               <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>Assign to</div>
-                              <select
-                                value={r.assigned_to || ''}
-                                onChange={e => assignTo(r.id, e.target.value)}
-                                style={{ ...IS, fontSize: 12 }}
-                              >
+                              <select value={r.assigned_to || ''} onChange={e => assignTo(r.id, e.target.value)} style={{ ...IS, fontSize: 12 }}>
                                 <option value="">Unassigned</option>
                                 {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                               </select>
                             </div>
-
-                            {/* Cancellation reason */}
                             <div>
                               <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>Cancellation reason</div>
-                              <select
-                                value={r.cancel_reason || ''}
-                                onChange={e => updateField(r.id, 'cancel_reason', e.target.value)}
-                                style={{ ...IS, fontSize: 12 }}
-                              >
+                              <select value={r.cancel_reason || ''} onChange={e => updateField(r.id, 'cancel_reason', e.target.value)} style={{ ...IS, fontSize: 12 }}>
                                 {CANCEL_REASONS.map(o => <option key={o} value={o}>{o || '— Select reason —'}</option>)}
                               </select>
                             </div>
                           </div>
-
-                          {/* Notes */}
                           <div style={{ marginBottom: 12 }}>
                             <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>Notes</div>
-                            <textarea
-                              defaultValue={r.notes || ''}
-                              onBlur={e => updateField(r.id, 'notes', e.target.value)}
-                              placeholder="Contact notes, what was discussed…"
-                              rows={2}
-                              style={{ ...IS, resize: 'none', lineHeight: 1.5, fontSize: 12, width: '100%' }}
-                            />
+                            <textarea defaultValue={r.notes || ''} onBlur={e => updateField(r.id, 'notes', e.target.value)} placeholder="Contact notes, what was discussed…" rows={2} style={{ ...IS, resize: 'none', lineHeight: 1.5, fontSize: 12, width: '100%' }} />
                           </div>
-
-                          {/* Follow-up opportunity */}
                           <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: 12 }}>
                             <div>
                               <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>Follow-up opportunity?</div>
                               <div style={{ display: 'flex', gap: 6 }}>
                                 {['Yes', 'No', 'Unknown'].map(opt => (
-                                  <button key={opt} onClick={() => updateField(r.id, 'follow_up_opp', opt)} style={{ padding: '4px 12px', borderRadius: 7, border: `1px solid ${r.follow_up_opp === opt ? N : 'var(--border)'}`, background: r.follow_up_opp === opt ? 'var(--primary-light)' : 'var(--surface)', color: r.follow_up_opp === opt ? N : 'var(--text-3)', fontSize: 11, fontWeight: r.follow_up_opp === opt ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    {opt}
-                                  </button>
+                                  <button key={opt} onClick={() => updateField(r.id, 'follow_up_opp', opt)} style={{ padding: '4px 12px', borderRadius: 7, border: `1px solid ${r.follow_up_opp === opt ? N : 'var(--border)'}`, background: r.follow_up_opp === opt ? 'var(--primary-light)' : 'var(--surface)', color: r.follow_up_opp === opt ? N : 'var(--text-3)', fontSize: 11, fontWeight: r.follow_up_opp === opt ? 600 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>{opt}</button>
                                 ))}
                               </div>
                             </div>
                             {r.follow_up_opp === 'Yes' && (
                               <div>
                                 <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>Follow-up notes</div>
-                                <input
-                                  defaultValue={r.follow_up_notes || ''}
-                                  onBlur={e => updateField(r.id, 'follow_up_notes', e.target.value)}
-                                  placeholder="What's the opportunity? e.g. May want renters insurance"
-                                  style={{ ...IS, fontSize: 12 }}
-                                />
+                                <input defaultValue={r.follow_up_notes || ''} onBlur={e => updateField(r.id, 'follow_up_notes', e.target.value)} placeholder="What's the opportunity? e.g. May want renters insurance" style={{ ...IS, fontSize: 12 }} />
                               </div>
                             )}
                           </div>
