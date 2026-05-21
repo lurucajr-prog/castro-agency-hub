@@ -123,7 +123,8 @@ export default function Chat({ user, chatChannel, onChatChannelConsumed }) {
   useEffect(() => {
     const realTimeChannel = supabase.channel(`chat_engine_${channel}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel=eq.${channel}` }, payload => {
-        setMessages(prev => [...prev, payload.new])
+        // Deduplicate — skip if we already added this via optimistic update
+        setMessages(prev => prev.some(m => m.id === payload.new.id) ? prev : [...prev, payload.new])
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `channel=eq.${channel}` }, payload => {
         setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m))
@@ -182,14 +183,17 @@ export default function Chat({ user, chatChannel, onChatChannelConsumed }) {
     isTypingRef.current = false
     await supabase.from('typing_indicators').delete().eq('uid', user.id).eq('channel', channel)
 
-    const { error } = await supabase.from('messages').insert({
+    const { data: newMsg, error } = await supabase.from('messages').insert({
       uid: user.id,
       text: payloadText || '',
       image_url: imageUrl || null,
       channel
-    })
+    }).select().single()
 
     if (error) return
+
+    // Show immediately — don't wait for real-time
+    setMessages(prev => prev.some(m => m.id === newMsg.id) ? prev : [...prev, newMsg])
 
     const alertList = profiles
       .filter(p => p.id !== user.id && canSee(p.name, channel))
@@ -258,20 +262,29 @@ export default function Chat({ user, chatChannel, onChatChannelConsumed }) {
   }
 
   async function togglePin(m) {
-    await supabase.from('messages').update({ is_pinned: !m.is_pinned }).eq('id', m.id)
+    const next = !m.is_pinned
+    setMessages(prev => prev.map(x => x.id === m.id ? { ...x, is_pinned: next } : x))
+    await supabase.from('messages').update({ is_pinned: next }).eq('id', m.id)
   }
 
   async function executeMessageUpdate() {
     if (!editText.trim() || !editingMsgId) return
-    await supabase.from('messages').update({ text: editText.trim(), edited: true, edited_at: new Date().toISOString() }).eq('id', editingMsgId)
+    const updatedText = editText.trim()
+    const targetId    = editingMsgId
     setEditingMsgId(null)
     setEditText('')
+    // Show change immediately
+    setMessages(prev => prev.map(m => m.id === targetId ? { ...m, text: updatedText, edited: true } : m))
+    await supabase.from('messages').update({ text: updatedText, edited: true, edited_at: new Date().toISOString() }).eq('id', targetId)
   }
 
   async function executeMessageRemoval() {
     if (!confirmDeleteMsg) return
-    await supabase.from('messages').delete().eq('id', confirmDeleteMsg.id)
+    const deletedId = confirmDeleteMsg.id
     setConfirmDeleteMsg(null)
+    // Remove immediately — don't wait for real-time
+    setMessages(prev => prev.filter(m => m.id !== deletedId))
+    await supabase.from('messages').delete().eq('id', deletedId)
   }
 
   function getSenderProfile(uid) {
