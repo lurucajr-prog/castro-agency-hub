@@ -7,8 +7,7 @@ import { supabase } from '../lib/supabase'
 import { N, R, Spinner, ConfirmModal } from './shared'
 
 const SOURCES = ['BP', 'Allstate Lead Marketplace', 'EverQuote', 'Other']
-const REASONS = ['Disconnected', 'Wrong Number', 'Out of State']
-
+const REASONS = ['Disconnected', 'Wrong Number', 'Out of State', 'Current Customer']
 const REASON_STYLE = {
   'Disconnected': { bg: '#fee2e2', color: '#991b1b' },
   'Wrong Number': { bg: '#fef9c3', color: '#854d0e' },
