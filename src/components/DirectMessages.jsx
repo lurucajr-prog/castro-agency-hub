@@ -280,8 +280,10 @@ export default function DirectMessages({ user, setPage, darkMode, dmTarget, onDm
   }
 
   async function uploadAndSend(file) {
-    if (!file || !file.type.startsWith('image/')) return
-    if (file.size > 5 * 1024 * 1024) { alert('Image must be under 5MB.'); return }
+    if (!file) return
+    const allowed = file.type.startsWith('image/') || file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    if (!allowed) return
+    if (file.size > 10 * 1024 * 1024) { alert('File must be under 10MB.'); return }
     setUploading(true)
     try {
       const ext      = file.name ? file.name.split('.').pop() : 'png'
@@ -431,7 +433,17 @@ export default function DirectMessages({ user, setPage, darkMode, dmTarget, onDm
                         <div style={{ display: 'flex', width: '100%', position: 'relative', alignItems: 'flex-start', gap: 8 }}>
                           <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '85%' }}>
                             <div style={{ color: 'var(--text-1)', fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                              {m.image_url && <img src={m.image_url} alt="Shared" onClick={() => setLightbox(m.image_url)} style={{ maxWidth: 320, maxHeight: 320, borderRadius: 12, display: 'block', cursor: 'zoom-in', objectFit: 'cover', marginBottom: m.text ? 8 : 0, boxShadow: 'var(--shadow-sm)' }} />}
+                              {m.image_url && (
+                              /\.pdf(\?|$)/i.test(m.image_url)
+                                ? <a href={m.image_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', textDecoration: 'none', marginBottom: m.text ? 8 : 0 }}>
+                                    <span style={{ fontSize: 28 }}>📄</span>
+                                    <div>
+                                      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-1)' }}>PDF Document</div>
+                                      <div style={{ fontSize: 11, color: N, fontWeight: 600 }}>Click to open ↗</div>
+                                    </div>
+                                  </a>
+                                : <img src={m.image_url} alt="Shared" onClick={() => setLightbox(m.image_url)} style={{ maxWidth: 320, maxHeight: 320, borderRadius: 12, display: 'block', cursor: 'zoom-in', objectFit: 'cover', marginBottom: m.text ? 8 : 0, boxShadow: 'var(--shadow-sm)' }} />
+                            )}
                               {m.text && <span>{m.text}</span>}
                             </div>
 
@@ -495,11 +507,11 @@ export default function DirectMessages({ user, setPage, darkMode, dmTarget, onDm
                 </div>
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', padding: '6px 8px', borderRadius: 12, boxShadow: 'var(--shadow-sm)' }}>
-                <button onClick={() => fileRef.current?.click()} disabled={uploading} title="Upload image" style={{ width: 40, height: 40, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <button onClick={() => fileRef.current?.click()} disabled={uploading} title="Upload image or PDF" style={{ width: 40, height: 40, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-3)', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'var(--surface-2)'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></svg>
                 </button>
                 <button onClick={() => { setShowGifPicker(!showGifPicker); if (!showGifPicker) loadGifs('') }} style={{ height: 40, padding: '0 12px', borderRadius: 8, border: 'none', background: showGifPicker ? 'var(--primary-light)' : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: showGifPicker ? 'var(--primary)' : 'var(--text-3)', transition: 'background 0.2s' }} onMouseEnter={e => { if (!showGifPicker) e.currentTarget.style.background = 'var(--surface-2)' }} onMouseLeave={e => { if (!showGifPicker) e.currentTarget.style.background = 'transparent' }}>GIF</button>
-                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} />
+                <input ref={fileRef} type="file" accept="image/*,.pdf,application/pdf" style={{ display: 'none' }} onChange={handleFileUpload} />
                 <input value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); sendMessage() } }} onPaste={handlePaste} placeholder={`Message ${selected.name}...`} disabled={uploading} style={{ flex: 1, padding: '10px 12px', border: 'none', background: 'transparent', color: 'var(--text-1)', fontSize: 15, outline: 'none' }} />
                 <button onClick={() => sendMessage()} disabled={uploading || !text.trim()} style={{ background: text.trim() ? 'var(--primary)' : 'var(--surface-3)', color: text.trim() ? '#fff' : 'var(--text-4)', border: 'none', borderRadius: 8, padding: '0 20px', height: 40, fontSize: 14, fontWeight: 700, cursor: text.trim() ? 'pointer' : 'default', transition: 'all 0.2s' }}>Send</button>
               </div>
