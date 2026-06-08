@@ -12,24 +12,29 @@ function SavedBadge({ show }) {
 }
 
 export default function AdminSettings({ user }) {
-  const [settings,    setSettings]    = useState({})
-  const [loading,     setLoading]     = useState(true)
-  const [saved,       setSaved]       = useState({})
-  const [pushMsg,     setPushMsg]     = useState('')
-  const [pushSending, setPushSending] = useState(false)
-  const [pushSent,    setPushSent]    = useState(false)
+  const [settings,      setSettings]      = useState({})
+  const [loading,       setLoading]       = useState(true)
+  const [saved,         setSaved]         = useState({})
+  const [pushMsg,       setPushMsg]       = useState('')
+  const [pushSending,   setPushSending]   = useState(false)
+  const [pushSent,      setPushSent]      = useState(false)
+  const [adminProfiles, setAdminProfiles] = useState([])
+  const [lbSaving,      setLbSaving]      = useState(null)
 
-  useEffect(() => { fetchSettings() }, [])
+  useEffect(() => { fetchAll() }, [])
 
-  async function fetchSettings() {
+  async function fetchAll() {
     try {
-      const { data, error } = await supabase.from('settings').select('*')
-      if (error) console.error('[AdminSettings] fetch error', error)
+      const [settingsRes, profilesRes] = await Promise.all([
+        supabase.from('settings').select('*'),
+        supabase.from('profiles').select('id, name, ini, show_on_leaderboard').eq('role', 'admin'),
+      ])
       const map = {}
-      ;(data || []).forEach(s => { map[s.key] = s.value })
+      ;(settingsRes.data || []).forEach(s => { map[s.key] = s.value })
       setSettings(map)
+      setAdminProfiles(profilesRes.data || [])
     } catch (e) {
-      console.error('[AdminSettings] unexpected error', e)
+      console.error('[AdminSettings] fetch error', e)
     } finally {
       setLoading(false)
     }
@@ -61,6 +66,13 @@ export default function AdminSettings({ user }) {
     setSettings(s => ({ ...s, [key]: value }))
     setSaved(s => ({ ...s, [key]: true }))
     setTimeout(() => setSaved(s => ({ ...s, [key]: false })), 2200)
+  }
+
+  async function toggleLeaderboard(profileId, current) {
+    setLbSaving(profileId)
+    await supabase.from('profiles').update({ show_on_leaderboard: !current }).eq('id', profileId)
+    setAdminProfiles(ps => ps.map(p => p.id === profileId ? { ...p, show_on_leaderboard: !current } : p))
+    setLbSaving(null)
   }
 
   if (loading) return <Spinner />
@@ -114,7 +126,49 @@ export default function AdminSettings({ user }) {
           </div>
         </Card>
 
-        {/* Google review link — NEW */}
+        {/* Leaderboard visibility */}
+        <Card style={{ gridColumn:'1 / -1' }}>
+          <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
+            Leaderboard visibility
+          </div>
+          <div style={{ fontSize:11, color:'var(--text-3)', marginBottom:14, lineHeight:1.5 }}>
+            Agents always appear on the leaderboard. Toggle admins on or off — when enabled they show up on both the Sales leaderboard and the Dashboard podium and can log sales for themselves.
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {adminProfiles.map(p => {
+              const on      = !!p.show_on_leaderboard
+              const saving  = lbSaving === p.id
+              return (
+                <div key={p.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', background:'var(--surface-2)', borderRadius:9, border:'1px solid var(--border)' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <div style={{ width:32, height:32, borderRadius:8, background:'#dc2626', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, color:'#fff' }}>
+                      {p.ini}
+                    </div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)' }}>{p.name}</div>
+                      <div style={{ fontSize:11, color:'var(--text-4)' }}>Admin</div>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ fontSize:11, color:'var(--text-4)' }}>
+                      {on ? '🟢 On leaderboard' : '⚫ Hidden'}
+                    </span>
+                    <Btn
+                      sm
+                      variant={on ? 'outline' : undefined}
+                      onClick={() => toggleLeaderboard(p.id, on)}
+                      disabled={saving}
+                    >
+                      {saving ? '…' : on ? 'Remove' : 'Add to leaderboard'}
+                    </Btn>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+
+        {/* Google review link */}
         <Card style={{ gridColumn:'1 / -1' }}>
           <div style={{ fontSize:13, fontWeight:600, color:'var(--text-1)', marginBottom:3 }}>
             Google review link
