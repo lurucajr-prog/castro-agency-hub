@@ -163,7 +163,7 @@ export default function Sales({ user }) {
   const weekStart = new Date(now); weekStart.setDate(diff); weekStart.setHours(0,0,0,0)
   const weekStartISO = weekStart.toISOString()
 
-  useEffect(() => { const members = profiles.filter(p => p.role === 'member'); if (members.length > 0) { const def = isAdmin ? members[0].id : user.id; setSForm(f => ({ ...f, uid:def })); setIaForm(f => ({ ...f, uid:def })) } }, [profiles])
+  useEffect(() => { const lbParticipants = profiles.filter(p => p.role === 'member' || (p.role === 'admin' && p.show_on_leaderboard)); if (lbParticipants.length > 0) { const def = isAdmin ? lbParticipants[0].id : user.id; setSForm(f => ({ ...f, uid:def })); setIaForm(f => ({ ...f, uid:def })) } }, [profiles])
   useEffect(() => { fetchStaticData() }, [])
   useEffect(() => { fetchMonthData()  }, [selectedMonth])
 
@@ -324,9 +324,9 @@ export default function Sales({ user }) {
 
   if (loading) return <Spinner />
 
-  const members = profiles.filter(p => p.role === 'member')
+  const lbParticipants = profiles.filter(p => p.role === 'member' || (p.role === 'admin' && p.show_on_leaderboard))
 
-  const lbData = members.map(m => {
+  const lbData = lbParticipants.map(m => {
     const ms     = sales.filter(s => s.uid === m.id)
     const ma     = acts.filter(a => a.uid === m.id)
     const items  = ms.reduce((s, x) => s + (x.items || 1), 0)
@@ -435,7 +435,7 @@ export default function Sales({ user }) {
                   {isAdmin && (
                     <Field label="Agent">
                       <select style={IS} value={sForm.uid} onChange={e => setSForm(f => ({ ...f, uid:e.target.value }))}>
-                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {lbParticipants.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     </Field>
                   )}
@@ -497,7 +497,7 @@ export default function Sales({ user }) {
                   {isAdmin && (
                     <Field label="Agent">
                       <select style={IS} value={iaForm.uid} onChange={e => setIaForm(f => ({ ...f, uid:e.target.value }))}>
-                        {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        {lbParticipants.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                       </select>
                     </Field>
                   )}
